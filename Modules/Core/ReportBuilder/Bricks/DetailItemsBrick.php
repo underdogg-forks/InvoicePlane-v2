@@ -8,6 +8,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\HtmlString;
+use Modules\Core\Enums\FieldPlacement;
 use Modules\Core\Enums\ReportBlockWidth;
 use Modules\Core\ReportBuilder\ReportBrick;
 
@@ -33,8 +34,28 @@ class DetailItemsBrick extends ReportBrick
         return trans('ip.line_items_table');
     }
 
+    public static function normalizeLegacyConfig(array $config): array
+    {
+        if ( ! isset($config['description_placement']) && isset($config['show_description'])) {
+            $config['description_placement'] = $config['show_description']
+                ? FieldPlacement::INLINE_COLUMN->value
+                : FieldPlacement::HIDDEN->value;
+        }
+
+        return $config;
+    }
+
+    public static function filterConfig(array $config): array
+    {
+        $config = static::normalizeLegacyConfig($config);
+
+        return parent::filterConfig($config);
+    }
+
     public static function toPreviewHtml(array $config): ?string
     {
+        $config = static::normalizeLegacyConfig($config);
+
         return view('core::report-builder.bricks.detail-items.preview', [
             'config' => $config,
         ])->render();
@@ -42,6 +63,8 @@ class DetailItemsBrick extends ReportBrick
 
     public static function toHtml(array $config, ?array $data = null): ?string
     {
+        $config = static::normalizeLegacyConfig($config);
+
         return view('core::report-builder.bricks.detail-items.index', [
             'config' => $config,
             'data'   => $data ?? [],
@@ -54,15 +77,23 @@ class DetailItemsBrick extends ReportBrick
             ->label(trans('ip.configure_line_items'))
             ->modalHeading(trans('ip.line_items_settings'))
             ->slideOver()
-            ->fillForm(fn (array $arguments): ?array => $arguments['config'] ?? null)
+            ->fillForm(function (array $arguments): ?array {
+                $config = $arguments['config'] ?? null;
+                if ($config !== null) {
+                    $config = static::normalizeLegacyConfig($config);
+                }
+
+                return $config;
+            })
             ->schema([
                 Select::make('_width')
                     ->label(trans('ip.width'))
                     ->options(collect(ReportBlockWidth::cases())->mapWithKeys(fn ($case) => [$case->value => trans("ip.{$case->value}_width")]))
                     ->default(ReportBlockWidth::FULL->value),
-                Checkbox::make('show_description')
-                    ->label(trans('ip.show_description'))
-                    ->default(true),
+                Select::make('description_placement')
+                    ->label(trans('ip.description_placement'))
+                    ->options(collect(FieldPlacement::cases())->mapWithKeys(fn ($case) => [$case->value => $case->getLabel()]))
+                    ->default(FieldPlacement::INLINE_COLUMN->value),
                 Checkbox::make('show_quantity')
                     ->label(trans('ip.show_quantity'))
                     ->default(true),

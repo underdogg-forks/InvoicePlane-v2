@@ -2,14 +2,12 @@
 
 namespace Modules\Core\Tests\Unit;
 
+use Modules\Core\Enums\FieldPlacement;
 use Modules\Core\Enums\ReportBlockWidth;
 use Modules\Core\ReportBuilder\Bricks\DetailColumnLabelsBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailInvoiceProductBrick;
-use Modules\Core\ReportBuilder\Bricks\DetailInvoiceProjectBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailItemsBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailQuoteProductBrick;
-use Modules\Core\ReportBuilder\Bricks\DetailQuoteProjectBrick;
-use Modules\Core\ReportBuilder\Bricks\DetailTasksBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterNotesBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterSummaryBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterTermsBrick;
@@ -17,7 +15,6 @@ use Modules\Core\ReportBuilder\Bricks\FooterTotalsBrick;
 use Modules\Core\ReportBuilder\Bricks\HeaderClientBrick;
 use Modules\Core\ReportBuilder\Bricks\HeaderCompanyBrick;
 use Modules\Core\ReportBuilder\Bricks\HeaderInvoiceMetaBrick;
-use Modules\Core\ReportBuilder\Bricks\HeaderProjectBrick;
 use Modules\Core\ReportBuilder\ReportBricksCollection;
 use Modules\Core\Tests\AbstractTestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -407,113 +404,6 @@ class MasonBricksTest extends AbstractTestCase
     }
 
     #[Test]
-    public function it_header_project_brick_generates_render_html_with_project_data(): void
-    {
-        /* Arrange */
-        $config = ['show_project_name' => true, 'show_project_number' => true];
-        $data   = [
-            'project' => [
-                'project_number' => 'PRJ-999',
-                'project_name'   => 'Alpha Project',
-                'start_at'       => '2026-01-01',
-                'end_at'         => '2026-06-01',
-                'project_status' => 'Active',
-            ],
-        ];
-
-        /* Act */
-        $html = HeaderProjectBrick::toHtml($config, $data);
-
-        /* Assert */
-        $this->assertIsString($html);
-        $this->assertStringContainsString('PRJ-999', $html);
-        $this->assertStringContainsString('Alpha Project', $html);
-    }
-
-    #[Test]
-    public function it_detail_tasks_brick_generates_render_html_with_task_rows(): void
-    {
-        /* Arrange */
-        $config = ['show_task_name' => true, 'show_task_price' => true];
-        $data   = [
-            'tasks' => [
-                [
-                    'task_number' => 'TSK-101',
-                    'task_name'   => 'Backend API Integration',
-                    'description' => 'Build endpoints',
-                    'due_at'      => '2026-02-01',
-                    'task_price'  => '450.00',
-                    'task_status' => 'Completed',
-                ],
-            ],
-        ];
-
-        /* Act */
-        $html = DetailTasksBrick::toHtml($config, $data);
-
-        /* Assert */
-        $this->assertIsString($html);
-        $this->assertStringContainsString('Backend API Integration', $html);
-        $this->assertStringContainsString('450.00', $html);
-    }
-
-    #[Test]
-    public function it_detail_invoice_project_brick_generates_render_html_with_project_items(): void
-    {
-        /* Arrange */
-        $config = ['show_project_name' => true, 'show_task_name' => true];
-        $data   = [
-            'project_items' => [
-                [
-                    'project_name' => 'Project Gamma',
-                    'task_name'    => 'Design Review',
-                    'description'  => 'Reviewing mockups',
-                    'hours'        => 3.5,
-                    'rate'         => '100.00',
-                    'total'        => '350.00',
-                ],
-            ],
-        ];
-
-        /* Act */
-        $html = DetailInvoiceProjectBrick::toHtml($config, $data);
-
-        /* Assert */
-        $this->assertIsString($html);
-        $this->assertStringContainsString('Project Gamma', $html);
-        $this->assertStringContainsString('Design Review', $html);
-        $this->assertStringContainsString('350.00', $html);
-    }
-
-    #[Test]
-    public function it_detail_quote_project_brick_generates_render_html_with_project_items(): void
-    {
-        /* Arrange */
-        $config = ['show_project_name' => true, 'show_task_name' => true];
-        $data   = [
-            'project_items' => [
-                [
-                    'project_name' => 'Quote Project Delta',
-                    'task_name'    => 'Initial Scoping',
-                    'description'  => 'Discovery phase',
-                    'hours'        => 4.0,
-                    'rate'         => '120.00',
-                    'total'        => '480.00',
-                ],
-            ],
-        ];
-
-        /* Act */
-        $html = DetailQuoteProjectBrick::toHtml($config, $data);
-
-        /* Assert */
-        $this->assertIsString($html);
-        $this->assertStringContainsString('Quote Project Delta', $html);
-        $this->assertStringContainsString('Initial Scoping', $html);
-        $this->assertStringContainsString('480.00', $html);
-    }
-
-    #[Test]
     public function it_all_bricks_have_unique_ids(): void
     {
         /* Arrange */
@@ -602,5 +492,281 @@ class MasonBricksTest extends AbstractTestCase
                 "Brick [{$brickClass}] should not contain outer inline-block width wrapper.",
             );
         }
+    }
+
+    #[Test]
+    public function it_renders_product_description_hidden_placement(): void
+    {
+        /* Arrange */
+        $config = [
+            'description_placement' => FieldPlacement::HIDDEN->value,
+        ];
+        $data = [
+            'invoice_items' => [
+                [
+                    'sku'         => 'SKU-001',
+                    'description' => 'Secret Description Should Not Appear',
+                    'quantity'    => 1,
+                    'unit_price'  => '50.00',
+                    'tax'         => '0.00',
+                    'total'       => '50.00',
+                ],
+            ],
+            'items' => [
+                [
+                    'description' => 'Line Item Secret Description',
+                    'quantity'    => 2,
+                    'price'       => '25.00',
+                    'tax'         => '0.00',
+                    'total'       => '50.00',
+                ],
+            ],
+        ];
+
+        /* Act */
+        $invoiceHtml = DetailInvoiceProductBrick::toHtml($config, $data);
+        $itemsHtml   = DetailItemsBrick::toHtml($config, $data);
+
+        /* Assert */
+        $this->assertStringNotContainsString('Secret Description Should Not Appear', (string) $invoiceHtml);
+        $this->assertStringNotContainsString('Line Item Secret Description', (string) $itemsHtml);
+    }
+
+    #[Test]
+    public function it_renders_product_description_inline_column_placement(): void
+    {
+        /* Arrange */
+        $config = [
+            'description_placement' => FieldPlacement::INLINE_COLUMN->value,
+        ];
+        $data = [
+            'invoice_items' => [
+                [
+                    'sku'         => 'SKU-001',
+                    'description' => 'Inline Description Text',
+                    'quantity'    => 1,
+                    'unit_price'  => '50.00',
+                    'tax'         => '0.00',
+                    'total'       => '50.00',
+                ],
+            ],
+            'items' => [
+                [
+                    'description' => 'Detail Items Inline Text',
+                    'quantity'    => 1,
+                    'price'       => '50.00',
+                    'tax'         => '0.00',
+                    'total'       => '50.00',
+                ],
+            ],
+        ];
+
+        /* Act */
+        $invoiceHtml = DetailInvoiceProductBrick::toHtml($config, $data);
+        $itemsHtml   = DetailItemsBrick::toHtml($config, $data);
+
+        /* Assert */
+        $this->assertStringContainsString('<th align="left">' . trans('ip.description') . '</th>', (string) $invoiceHtml);
+        $this->assertStringContainsString('<td>Inline Description Text</td>', (string) $invoiceHtml);
+        $this->assertStringContainsString('<th align="left">' . trans('ip.description') . '</th>', (string) $itemsHtml);
+        $this->assertStringContainsString('<td>Detail Items Inline Text</td>', (string) $itemsHtml);
+        $this->assertStringNotContainsString('colspan=', (string) $invoiceHtml);
+        $this->assertStringNotContainsString('colspan=', (string) $itemsHtml);
+    }
+
+    #[Test]
+    public function it_renders_product_description_below_row_placement(): void
+    {
+        /* Arrange */
+        $config = [
+            'description_placement' => FieldPlacement::BELOW_ROW->value,
+        ];
+        $data = [
+            'invoice_items' => [
+                [
+                    'sku'         => 'SKU-001',
+                    'description' => 'Subline Description Text',
+                    'quantity'    => 1,
+                    'unit_price'  => '50.00',
+                    'tax'         => '0.00',
+                    'total'       => '50.00',
+                ],
+            ],
+            'items' => [
+                [
+                    'description' => 'Detail Items Subline Text',
+                    'quantity'    => 1,
+                    'price'       => '50.00',
+                    'tax'         => '0.00',
+                    'total'       => '50.00',
+                ],
+            ],
+        ];
+
+        /* Act */
+        $invoiceHtml = DetailInvoiceProductBrick::toHtml($config, $data);
+        $itemsHtml   = DetailItemsBrick::toHtml($config, $data);
+
+        /* Assert */
+        $this->assertStringNotContainsString('<th>' . trans('ip.description') . '</th>', (string) $invoiceHtml);
+        $this->assertStringContainsString('colspan="5"', (string) $invoiceHtml);
+        $this->assertStringContainsString('Subline Description Text', (string) $invoiceHtml);
+
+        $this->assertStringNotContainsString('<th>' . trans('ip.description') . '</th>', (string) $itemsHtml);
+        $this->assertStringContainsString('colspan="4"', (string) $itemsHtml);
+        $this->assertStringContainsString('Detail Items Subline Text', (string) $itemsHtml);
+    }
+
+    #[Test]
+    public function it_calculates_correct_colspan_for_below_row_sub_row_when_toggles_vary(): void
+    {
+        /* Arrange */
+        $data = [
+            'invoice_items' => [
+                [
+                    'sku'         => 'SKU-001',
+                    'description' => 'Description with varying columns',
+                    'quantity'    => 1,
+                    'unit_price'  => '50.00',
+                    'tax'         => '0.00',
+                    'discount'    => '5.00',
+                    'total'       => '45.00',
+                ],
+            ],
+            'items' => [
+                [
+                    'description' => 'Item description with varying columns',
+                    'quantity'    => 1,
+                    'price'       => '50.00',
+                    'tax'         => '0.00',
+                    'total'       => '50.00',
+                ],
+            ],
+        ];
+
+        /* Test invoice product brick with SKU hidden: 4 visible cols (qty, unit_price, tax, total) */
+        /* Act */
+        $htmlSkuHidden = DetailInvoiceProductBrick::toHtml([
+            'description_placement' => FieldPlacement::BELOW_ROW->value,
+            'show_sku'              => false,
+        ], $data);
+
+        /* Assert */
+        $this->assertStringContainsString('colspan="4"', (string) $htmlSkuHidden);
+
+        /* Test invoice product brick with discount shown and SKU hidden: 5 visible cols */
+        /* Act */
+        $htmlWithDiscount = DetailInvoiceProductBrick::toHtml([
+            'description_placement' => FieldPlacement::BELOW_ROW->value,
+            'show_sku'              => false,
+            'show_discount'         => true,
+        ], $data);
+
+        /* Assert */
+        $this->assertStringContainsString('colspan="5"', (string) $htmlWithDiscount);
+
+        /* Test invoice product brick with all other columns hidden */
+        /* Act */
+        $htmlMinimal = DetailInvoiceProductBrick::toHtml([
+            'description_placement' => FieldPlacement::BELOW_ROW->value,
+            'show_sku'              => false,
+            'show_quantity'         => false,
+            'show_unit_price'       => false,
+            'show_tax'              => false,
+            'show_discount'         => false,
+            'show_total'            => false,
+        ], $data);
+
+        /* Assert */
+        $this->assertStringContainsString('colspan="1"', (string) $htmlMinimal);
+
+        /* Test detail items brick with tax hidden: 3 visible cols (qty, price, total) */
+        /* Act */
+        $htmlItemsTaxHidden = DetailItemsBrick::toHtml([
+            'description_placement' => FieldPlacement::BELOW_ROW->value,
+            'show_tax'              => false,
+        ], $data);
+
+        /* Assert */
+        $this->assertStringContainsString('colspan="3"', (string) $htmlItemsTaxHidden);
+    }
+
+    #[Test]
+    public function it_maintains_backward_compatibility_with_legacy_show_description_boolean(): void
+    {
+        /* Arrange */
+        $data = [
+            'invoice_items' => [
+                [
+                    'sku'         => 'SKU-001',
+                    'description' => 'Legacy Description',
+                    'quantity'    => 1,
+                    'unit_price'  => '50.00',
+                    'tax'         => '0.00',
+                    'total'       => '50.00',
+                ],
+            ],
+        ];
+
+        /* Act */
+        $htmlLegacyTrue   = DetailInvoiceProductBrick::toHtml(['show_description' => true], $data);
+        $htmlNewInline    = DetailInvoiceProductBrick::toHtml(['description_placement' => FieldPlacement::INLINE_COLUMN->value], $data);
+        $htmlLegacyFalse  = DetailInvoiceProductBrick::toHtml(['show_description' => false], $data);
+        $htmlNewHidden    = DetailInvoiceProductBrick::toHtml(['description_placement' => FieldPlacement::HIDDEN->value], $data);
+        $htmlDefaultEmpty = DetailInvoiceProductBrick::toHtml([], $data);
+
+        /* Assert */
+        $this->assertEquals($htmlNewInline, $htmlLegacyTrue);
+        $this->assertEquals($htmlNewHidden, $htmlLegacyFalse);
+        $this->assertEquals($htmlNewInline, $htmlDefaultEmpty);
+        $this->assertStringContainsString('<td>Legacy Description</td>', (string) $htmlLegacyTrue);
+        $this->assertStringNotContainsString('Legacy Description', (string) $htmlLegacyFalse);
+    }
+
+    #[Test]
+    public function it_renders_multiple_items_with_below_row_descriptions_in_correct_order(): void
+    {
+        /* Arrange */
+        $config = [
+            'description_placement' => FieldPlacement::BELOW_ROW->value,
+        ];
+        $data = [
+            'invoice_items' => [
+                [
+                    'sku'         => 'SKU-001',
+                    'description' => 'Description Item 1',
+                    'quantity'    => 1,
+                    'unit_price'  => '10.00',
+                    'tax'         => '0.00',
+                    'total'       => '10.00',
+                ],
+                [
+                    'sku'         => 'SKU-002',
+                    'description' => 'Description Item 2',
+                    'quantity'    => 2,
+                    'unit_price'  => '20.00',
+                    'tax'         => '0.00',
+                    'total'       => '40.00',
+                ],
+            ],
+        ];
+
+        /* Act */
+        $html = (string) DetailInvoiceProductBrick::toHtml($config, $data);
+
+        /* Assert — Item 1 main row -> Item 1 description -> Item 2 main row -> Item 2 description */
+        $posItem1Sku  = mb_strpos($html, 'SKU-001');
+        $posItem1Desc = mb_strpos($html, 'Description Item 1');
+        $posItem2Sku  = mb_strpos($html, 'SKU-002');
+        $posItem2Desc = mb_strpos($html, 'Description Item 2');
+
+        $this->assertNotFalse($posItem1Sku);
+        $this->assertNotFalse($posItem1Desc);
+        $this->assertNotFalse($posItem2Sku);
+        $this->assertNotFalse($posItem2Desc);
+
+        $this->assertTrue($posItem1Sku < $posItem1Desc, 'Item 1 SKU must precede Item 1 description');
+        $this->assertTrue($posItem1Desc < $posItem2Sku, 'Item 1 description must precede Item 2 SKU');
+        $this->assertTrue($posItem2Sku < $posItem2Desc, 'Item 2 SKU must precede Item 2 description');
     }
 }

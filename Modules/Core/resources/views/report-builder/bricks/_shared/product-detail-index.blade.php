@@ -10,6 +10,33 @@
     'dataKey' => 'invoice_items',
 ])
 
+@php
+    $placement = $config['description_placement'] ?? (isset($config['show_description']) ? ($config['show_description'] ? 'inline_column' : 'hidden') : 'inline_column');
+    $columnCount = 0;
+    if ($config['show_sku'] ?? true) {
+        $columnCount++;
+    }
+    if ($placement === 'inline_column') {
+        $columnCount++;
+    }
+    if ($config['show_quantity'] ?? true) {
+        $columnCount++;
+    }
+    if ($config['show_unit_price'] ?? true) {
+        $columnCount++;
+    }
+    if ($config['show_tax'] ?? true) {
+        $columnCount++;
+    }
+    if ($config['show_discount'] ?? false) {
+        $columnCount++;
+    }
+    if ($config['show_total'] ?? true) {
+        $columnCount++;
+    }
+    $columnCount = max(1, $columnCount);
+@endphp
+
 <div class="{{ $itemsClass }}" style="font-size: {{ $config['font_size'] ?? 9 }}pt;">
     <table width="100%" cellpadding="4" cellspacing="0" border="1" style="border-collapse: collapse;">
         @if($config['show_table_header'] ?? true)
@@ -18,7 +45,7 @@
                     @if($config['show_sku'] ?? true)
                         <th align="left" width="12%">{{ trans('ip.sku') }}</th>
                     @endif
-                    @if($config['show_description'] ?? true)
+                    @if($placement === 'inline_column')
                         <th align="left">{{ trans('ip.description') }}</th>
                     @endif
                     @if($config['show_quantity'] ?? true)
@@ -45,7 +72,7 @@
                     @if($config['show_sku'] ?? true)
                         <td>{{ $item['sku'] ?? '' }}</td>
                     @endif
-                    @if($config['show_description'] ?? true)
+                    @if($placement === 'inline_column')
                         <td>{{ $item['description'] ?? '' }}</td>
                     @endif
                     @if($config['show_quantity'] ?? true)
@@ -64,6 +91,13 @@
                         <td align="right">{{ $item['total'] ?? '0.00' }}</td>
                     @endif
                 </tr>
+                @if($placement === 'below_row')
+                    <tr style="{{ ($config['alternating_rows'] ?? true) && $index % 2 == 1 ? 'background-color: #f9fafb;' : '' }}">
+                        <td colspan="{{ $columnCount }}" style="font-size: {{ max(7, ($config['font_size'] ?? 9) - 1) }}pt; color: #4b5563; padding: 2px 4px 4px 12px;">
+                            {{ $item['description'] ?? '' }}
+                        </td>
+                    </tr>
+                @endif
             @endforeach
         </tbody>
     </table>

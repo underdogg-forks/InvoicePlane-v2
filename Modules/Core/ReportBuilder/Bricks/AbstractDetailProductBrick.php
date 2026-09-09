@@ -6,6 +6,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Modules\Core\Enums\FieldPlacement;
 use Modules\Core\Enums\ReportBlockWidth;
 use Modules\Core\ReportBuilder\ReportBrick;
 
@@ -38,8 +39,28 @@ abstract class AbstractDetailProductBrick extends ReportBrick
         return trans(static::labelKey());
     }
 
+    public static function normalizeLegacyConfig(array $config): array
+    {
+        if ( ! isset($config['description_placement']) && isset($config['show_description'])) {
+            $config['description_placement'] = $config['show_description']
+                ? FieldPlacement::INLINE_COLUMN->value
+                : FieldPlacement::HIDDEN->value;
+        }
+
+        return $config;
+    }
+
+    public static function filterConfig(array $config): array
+    {
+        $config = static::normalizeLegacyConfig($config);
+
+        return parent::filterConfig($config);
+    }
+
     public static function toPreviewHtml(array $config): ?string
     {
+        $config = static::normalizeLegacyConfig($config);
+
         return view('core::report-builder.bricks.' . static::viewSlug() . '.preview', [
             'config' => $config,
         ])->render();
@@ -47,6 +68,8 @@ abstract class AbstractDetailProductBrick extends ReportBrick
 
     public static function toHtml(array $config, ?array $data = null): ?string
     {
+        $config = static::normalizeLegacyConfig($config);
+
         return view('core::report-builder.bricks.' . static::viewSlug() . '.index', [
             'config' => $config,
             'data'   => $data ?? [],
@@ -59,7 +82,14 @@ abstract class AbstractDetailProductBrick extends ReportBrick
             ->label(trans(static::configureLabelKey()))
             ->modalHeading(trans(static::modalHeadingKey()))
             ->slideOver()
-            ->fillForm(fn (array $arguments): ?array => $arguments['config'] ?? null)
+            ->fillForm(function (array $arguments): ?array {
+                $config = $arguments['config'] ?? null;
+                if ($config !== null) {
+                    $config = static::normalizeLegacyConfig($config);
+                }
+
+                return $config;
+            })
             ->schema([
                 Select::make('_width')
                     ->label(trans('ip.width'))
@@ -68,9 +98,10 @@ abstract class AbstractDetailProductBrick extends ReportBrick
                 Checkbox::make('show_sku')
                     ->label(trans('ip.show_sku'))
                     ->default(true),
-                Checkbox::make('show_description')
-                    ->label(trans('ip.show_description'))
-                    ->default(true),
+                Select::make('description_placement')
+                    ->label(trans('ip.description_placement'))
+                    ->options(collect(FieldPlacement::cases())->mapWithKeys(fn ($case) => [$case->value => $case->getLabel()]))
+                    ->default(FieldPlacement::INLINE_COLUMN->value),
                 Checkbox::make('show_quantity')
                     ->label(trans('ip.show_quantity'))
                     ->default(true),
