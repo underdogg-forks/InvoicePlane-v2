@@ -8,8 +8,11 @@ use Modules\Core\ReportBuilder\Bricks\DetailColumnLabelsBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailCustomerAgingBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailExpenseBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailInvoiceProductBrick;
+use Modules\Core\ReportBuilder\Bricks\DetailInvoiceProjectBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailItemsBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailQuoteProductBrick;
+use Modules\Core\ReportBuilder\Bricks\DetailQuoteProjectBrick;
+use Modules\Core\ReportBuilder\Bricks\DetailTasksBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterNotesBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterSummaryBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterTermsBrick;
@@ -17,6 +20,7 @@ use Modules\Core\ReportBuilder\Bricks\FooterTotalsBrick;
 use Modules\Core\ReportBuilder\Bricks\HeaderClientBrick;
 use Modules\Core\ReportBuilder\Bricks\HeaderCompanyBrick;
 use Modules\Core\ReportBuilder\Bricks\HeaderInvoiceMetaBrick;
+use Modules\Core\ReportBuilder\Bricks\HeaderProjectBrick;
 use Modules\Core\ReportBuilder\Bricks\HeaderQuoteMetaBrick;
 use Modules\Core\ReportBuilder\Bricks\PageBreakBrick;
 use Modules\Core\ReportBuilder\Bricks\SpacerBrick;
@@ -101,20 +105,12 @@ class ReportBricksCollection
             HeaderClientBrick::class,
             HeaderInvoiceMetaBrick::class,
             HeaderQuoteMetaBrick::class,
+            HeaderProjectBrick::class,
         ];
     }
 
     /**
      * Get detail section bricks.
-     *
-     * HeaderProjectBrick, DetailTasksBrick, DetailInvoiceProjectBrick and
-     * DetailQuoteProjectBrick are intentionally not registered here: invoices
-     * and quotes have no foreign key to a Project/Task in this schema (a
-     * Project belongs to a customer, not to a specific invoice/quote), so
-     * ReportDataMapper has no well-defined data to feed them. Wiring them up
-     * would mean guessing product intent (which project? all of the
-     * customer's?) rather than fixing a bug. Re-register once that data path
-     * is defined; the brick classes and views are left in place for that.
      *
      * @return array<class-string>
      */
@@ -125,6 +121,9 @@ class ReportBricksCollection
             DetailItemsBrick::class,
             DetailInvoiceProductBrick::class,
             DetailQuoteProductBrick::class,
+            DetailInvoiceProjectBrick::class,
+            DetailQuoteProjectBrick::class,
+            DetailTasksBrick::class,
             DetailCustomerAgingBrick::class,
             DetailExpenseBrick::class,
         ];

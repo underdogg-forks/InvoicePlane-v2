@@ -38,8 +38,11 @@ class ReportDataMapper
             'company.communications',
             'customer.addresses',
             'customer.communications',
+            'customer.projects.tasks',
+            'customer.tasks',
             'invoiceItems.product.productCategory',
             'invoiceItems.taxRate',
+            'invoiceItems.task.project',
             'payments',
             'expenses.expenseCategory',
             'expenses.vendor',
@@ -60,6 +63,9 @@ class ReportDataMapper
             'items'         => $invoice->invoiceItems->map(fn ($item): array => $this->itemData($item))->all(),
             'invoice_items' => $invoice->invoiceItems->map(fn ($item): array => $this->productItemData($item))->all(),
             'expense_items' => $invoice->expenses->map(fn ($expense): array => $this->expenseItemData($expense))->all(),
+            'project'       => $this->projectData($invoice->invoiceItems, $invoice->customer),
+            'tasks'         => $this->tasksData($invoice->invoiceItems, $invoice->customer),
+            'project_items' => $this->projectItemsData($invoice->invoiceItems, $invoice->customer),
             'totals'        => [
                 'subtotal' => $this->money($invoice->invoice_item_subtotal),
                 'tax'      => $this->money($invoice->invoice_tax_total),
@@ -81,8 +87,11 @@ class ReportDataMapper
             'company.communications',
             'prospect.addresses',
             'prospect.communications',
+            'prospect.projects.tasks',
+            'prospect.tasks',
             'quoteItems.product.productCategory',
             'quoteItems.taxRate',
+            'quoteItems.task.project',
         ]);
 
         return [
@@ -94,9 +103,12 @@ class ReportDataMapper
                 'quote_expires_at' => $quote->quote_expires_at?->format('Y-m-d') ?? '',
                 'quote_status'     => $quote->quote_status?->value ?? '',
             ],
-            'items'       => $quote->quoteItems->map(fn ($item): array => $this->itemData($item))->all(),
-            'quote_items' => $quote->quoteItems->map(fn ($item): array => $this->productItemData($item))->all(),
-            'totals'      => [
+            'items'         => $quote->quoteItems->map(fn ($item): array => $this->itemData($item))->all(),
+            'quote_items'   => $quote->quoteItems->map(fn ($item): array => $this->productItemData($item))->all(),
+            'project'       => $this->projectData($quote->quoteItems, $quote->prospect),
+            'tasks'         => $this->tasksData($quote->quoteItems, $quote->prospect),
+            'project_items' => $this->projectItemsData($quote->quoteItems, $quote->prospect),
+            'totals'        => [
                 'subtotal' => $this->money($quote->quote_item_subtotal),
                 'tax'      => $this->money($quote->quote_tax_total),
                 'total'    => $this->money($quote->quote_total),
@@ -312,5 +324,109 @@ class ReportDataMapper
     protected function money(mixed $amount): string
     {
         return number_format((float) $amount, 2, '.', '');
+    }
+
+    /**
+     * Data array for header_project brick.
+     *
+     * @param \Illuminate\Support\Collection $items
+     */
+    protected function projectData($items, ?Relation $client): array
+    {
+        $project = $items->first(fn ($item): bool => $item->task?->project !== null)?->task?->project
+            ?? collect($client?->projects)->first();
+
+        if ($project === null) {
+            return [
+                'project_number' => '',
+                'project_name'   => '',
+                'start_at'       => '',
+                'end_at'         => '',
+                'project_status' => '',
+            ];
+        }
+
+        return [
+            'project_number' => (string) ($project->project_number ?? ''),
+            'project_name'   => (string) ($project->project_name ?? ''),
+            'start_at'       => $project->start_at?->format('Y-m-d') ?? '',
+            'end_at'         => $project->end_at?->format('Y-m-d') ?? '',
+            'project_status' => (string) ($project->project_status?->label() ?? ($project->project_status?->value ?? '')),
+        ];
+    }
+
+    /**
+     * Data array for detail_tasks brick.
+     *
+     * @param \Illuminate\Support\Collection $items
+     */
+    protected function tasksData($items, ?Relation $client): array
+    {
+        $billedTasks = $items->map(fn ($item) => $item->task)->filter()->unique('id');
+
+        if ($billedTasks->isNotEmpty()) {
+            $tasks = $billedTasks;
+        } elseif ($client !== null) {
+            $clientTasks    = collect($client->tasks);
+            $clientProjects = collect($client->projects);
+            $tasks          = $clientTasks->isNotEmpty()
+                ? $clientTasks
+                : $clientProjects->flatMap(fn ($project) => collect($project->tasks))->unique('id');
+        } else {
+            $tasks = collect();
+        }
+
+        return $tasks->map(fn ($task): array => [
+            'task_number' => (string) ($task->task_number ?? ''),
+            'task_name'   => (string) ($task->task_name ?? ''),
+            'description' => (string) ($task->description ?? ''),
+            'due_at'      => $task->due_at?->format('Y-m-d') ?? '',
+            'task_price'  => $this->money($task->task_price ?? 0),
+            'task_status' => (string) ($task->task_status?->label() ?? ($task->task_status?->value ?? '')),
+        ])->values()->all();
+    }
+
+    /**
+     * Data array for detail_invoice_project and detail_quote_project bricks.
+     *
+     * @param \Illuminate\Support\Collection $items
+     */
+    protected function projectItemsData($items, ?Relation $client): array
+    {
+        $itemsWithTask = $items->filter(fn ($item): bool => $item->task !== null);
+
+        if ($itemsWithTask->isNotEmpty()) {
+            return $itemsWithTask->map(fn ($item): array => [
+                'project_name' => (string) ($item->task?->project?->project_name ?? ''),
+                'task_name'    => (string) ($item->task?->task_name ?? ($item->item_name ?: '')),
+                'description'  => (string) ($item->description ?: ($item->task?->description ?? '')),
+                'hours'        => (float) $item->quantity,
+                'rate'         => $this->money($item->price),
+                'total'        => $this->money($item->total),
+            ])->values()->all();
+        }
+
+        $clientProjects = collect($client?->projects);
+
+        if ($clientProjects->isNotEmpty()) {
+            $rows = [];
+            foreach ($clientProjects as $project) {
+                foreach (collect($project->tasks) as $task) {
+                    $price  = (float) ($task->task_price ?? 0);
+                    $rows[] = [
+                        'project_name' => (string) ($project->project_name ?? ''),
+                        'task_name'    => (string) ($task->task_name ?? ''),
+                        'description'  => (string) ($task->description ?? ''),
+                        'hours'        => 1.0,
+                        'rate'         => $this->money($price),
+                        'total'        => $this->money($price),
+                    ];
+                }
+            }
+
+            return $rows;
+        }
+
+        return [];
     }
 }

@@ -5,8 +5,11 @@ namespace Modules\Core\Tests\Unit;
 use Modules\Core\Enums\ReportBlockWidth;
 use Modules\Core\ReportBuilder\Bricks\DetailColumnLabelsBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailInvoiceProductBrick;
+use Modules\Core\ReportBuilder\Bricks\DetailInvoiceProjectBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailItemsBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailQuoteProductBrick;
+use Modules\Core\ReportBuilder\Bricks\DetailQuoteProjectBrick;
+use Modules\Core\ReportBuilder\Bricks\DetailTasksBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterNotesBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterSummaryBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterTermsBrick;
@@ -14,6 +17,7 @@ use Modules\Core\ReportBuilder\Bricks\FooterTotalsBrick;
 use Modules\Core\ReportBuilder\Bricks\HeaderClientBrick;
 use Modules\Core\ReportBuilder\Bricks\HeaderCompanyBrick;
 use Modules\Core\ReportBuilder\Bricks\HeaderInvoiceMetaBrick;
+use Modules\Core\ReportBuilder\Bricks\HeaderProjectBrick;
 use Modules\Core\ReportBuilder\ReportBricksCollection;
 use Modules\Core\Tests\AbstractTestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -400,6 +404,113 @@ class MasonBricksTest extends AbstractTestCase
         /* Assert */
         $this->assertStringContainsString('Quote Row', $html);
         $this->assertStringNotContainsString('Invoice Row', $html);
+    }
+
+    #[Test]
+    public function it_header_project_brick_generates_render_html_with_project_data(): void
+    {
+        /* Arrange */
+        $config = ['show_project_name' => true, 'show_project_number' => true];
+        $data   = [
+            'project' => [
+                'project_number' => 'PRJ-999',
+                'project_name'   => 'Alpha Project',
+                'start_at'       => '2026-01-01',
+                'end_at'         => '2026-06-01',
+                'project_status' => 'Active',
+            ],
+        ];
+
+        /* Act */
+        $html = HeaderProjectBrick::toHtml($config, $data);
+
+        /* Assert */
+        $this->assertIsString($html);
+        $this->assertStringContainsString('PRJ-999', $html);
+        $this->assertStringContainsString('Alpha Project', $html);
+    }
+
+    #[Test]
+    public function it_detail_tasks_brick_generates_render_html_with_task_rows(): void
+    {
+        /* Arrange */
+        $config = ['show_task_name' => true, 'show_task_price' => true];
+        $data   = [
+            'tasks' => [
+                [
+                    'task_number' => 'TSK-101',
+                    'task_name'   => 'Backend API Integration',
+                    'description' => 'Build endpoints',
+                    'due_at'      => '2026-02-01',
+                    'task_price'  => '450.00',
+                    'task_status' => 'Completed',
+                ],
+            ],
+        ];
+
+        /* Act */
+        $html = DetailTasksBrick::toHtml($config, $data);
+
+        /* Assert */
+        $this->assertIsString($html);
+        $this->assertStringContainsString('Backend API Integration', $html);
+        $this->assertStringContainsString('450.00', $html);
+    }
+
+    #[Test]
+    public function it_detail_invoice_project_brick_generates_render_html_with_project_items(): void
+    {
+        /* Arrange */
+        $config = ['show_project_name' => true, 'show_task_name' => true];
+        $data   = [
+            'project_items' => [
+                [
+                    'project_name' => 'Project Gamma',
+                    'task_name'    => 'Design Review',
+                    'description'  => 'Reviewing mockups',
+                    'hours'        => 3.5,
+                    'rate'         => '100.00',
+                    'total'        => '350.00',
+                ],
+            ],
+        ];
+
+        /* Act */
+        $html = DetailInvoiceProjectBrick::toHtml($config, $data);
+
+        /* Assert */
+        $this->assertIsString($html);
+        $this->assertStringContainsString('Project Gamma', $html);
+        $this->assertStringContainsString('Design Review', $html);
+        $this->assertStringContainsString('350.00', $html);
+    }
+
+    #[Test]
+    public function it_detail_quote_project_brick_generates_render_html_with_project_items(): void
+    {
+        /* Arrange */
+        $config = ['show_project_name' => true, 'show_task_name' => true];
+        $data   = [
+            'project_items' => [
+                [
+                    'project_name' => 'Quote Project Delta',
+                    'task_name'    => 'Initial Scoping',
+                    'description'  => 'Discovery phase',
+                    'hours'        => 4.0,
+                    'rate'         => '120.00',
+                    'total'        => '480.00',
+                ],
+            ],
+        ];
+
+        /* Act */
+        $html = DetailQuoteProjectBrick::toHtml($config, $data);
+
+        /* Assert */
+        $this->assertIsString($html);
+        $this->assertStringContainsString('Quote Project Delta', $html);
+        $this->assertStringContainsString('Initial Scoping', $html);
+        $this->assertStringContainsString('480.00', $html);
     }
 
     #[Test]

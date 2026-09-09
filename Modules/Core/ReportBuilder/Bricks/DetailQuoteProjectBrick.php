@@ -9,6 +9,7 @@ use Filament\Forms\Components\TextInput;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\HtmlString;
 use Modules\Core\Enums\ReportBlockWidth;
+use Modules\Core\Enums\ReportTemplateType;
 use Modules\Core\ReportBuilder\ReportBrick;
 
 class DetailQuoteProjectBrick extends ReportBrick
@@ -16,6 +17,11 @@ class DetailQuoteProjectBrick extends ReportBrick
     public static function getId(): string
     {
         return 'detail_quote_project';
+    }
+
+    public static function allowedTypes(): array
+    {
+        return [ReportTemplateType::QUOTE];
     }
 
     public static function getLabel(): string

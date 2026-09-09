@@ -8,8 +8,11 @@ use Modules\Core\ReportBuilder\Bricks\DetailColumnLabelsBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailCustomerAgingBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailExpenseBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailInvoiceProductBrick;
+use Modules\Core\ReportBuilder\Bricks\DetailInvoiceProjectBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailItemsBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailQuoteProductBrick;
+use Modules\Core\ReportBuilder\Bricks\DetailQuoteProjectBrick;
+use Modules\Core\ReportBuilder\Bricks\DetailTasksBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterNotesBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterSummaryBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterTermsBrick;
@@ -17,6 +20,7 @@ use Modules\Core\ReportBuilder\Bricks\FooterTotalsBrick;
 use Modules\Core\ReportBuilder\Bricks\HeaderClientBrick;
 use Modules\Core\ReportBuilder\Bricks\HeaderCompanyBrick;
 use Modules\Core\ReportBuilder\Bricks\HeaderInvoiceMetaBrick;
+use Modules\Core\ReportBuilder\Bricks\HeaderProjectBrick;
 use Modules\Core\ReportBuilder\Bricks\HeaderQuoteMetaBrick;
 use Modules\Core\ReportBuilder\Bricks\PageBreakBrick;
 use Modules\Core\ReportBuilder\Bricks\SpacerBrick;
@@ -34,7 +38,7 @@ class ReportBricksCollectionTest extends AbstractTestCase
 
         /* Assert */
         $this->assertIsArray($bricks);
-        $this->assertCount(16, $bricks);
+        $this->assertCount(20, $bricks);
     }
 
     #[Test]
@@ -45,11 +49,12 @@ class ReportBricksCollectionTest extends AbstractTestCase
 
         /* Assert */
         $this->assertIsArray($headerBricks);
-        $this->assertCount(4, $headerBricks);
+        $this->assertCount(5, $headerBricks);
         $this->assertContains(HeaderCompanyBrick::class, $headerBricks);
         $this->assertContains(HeaderClientBrick::class, $headerBricks);
         $this->assertContains(HeaderInvoiceMetaBrick::class, $headerBricks);
         $this->assertContains(HeaderQuoteMetaBrick::class, $headerBricks);
+        $this->assertContains(HeaderProjectBrick::class, $headerBricks);
     }
 
     #[Test]
@@ -60,34 +65,29 @@ class ReportBricksCollectionTest extends AbstractTestCase
 
         /* Assert */
         $this->assertIsArray($detailBricks);
-        $this->assertCount(6, $detailBricks);
+        $this->assertCount(9, $detailBricks);
         $this->assertContains(DetailColumnLabelsBrick::class, $detailBricks);
         $this->assertContains(DetailItemsBrick::class, $detailBricks);
         $this->assertContains(DetailInvoiceProductBrick::class, $detailBricks);
         $this->assertContains(DetailQuoteProductBrick::class, $detailBricks);
+        $this->assertContains(DetailInvoiceProjectBrick::class, $detailBricks);
+        $this->assertContains(DetailQuoteProjectBrick::class, $detailBricks);
+        $this->assertContains(DetailTasksBrick::class, $detailBricks);
         $this->assertContains(DetailCustomerAgingBrick::class, $detailBricks);
         $this->assertContains(DetailExpenseBrick::class, $detailBricks);
     }
 
-    /**
-     * HeaderProjectBrick, DetailTasksBrick, DetailInvoiceProjectBrick and
-     * DetailQuoteProjectBrick are deliberately not registered — see the
-     * comment on ReportBricksCollection::detail(). Invoices/quotes have no
-     * FK to a Project/Task, so ReportDataMapper has nothing to feed them;
-     * offering them would mean dragging a brick onto a real PDF that always
-     * renders blank.
-     */
     #[Test]
-    public function it_does_not_offer_bricks_with_no_defined_data_source(): void
+    public function it_offers_project_and_task_bricks(): void
     {
         /* Act */
         $allBricks = ReportBricksCollection::all();
 
         /* Assert */
-        $this->assertNotContains(\Modules\Core\ReportBuilder\Bricks\HeaderProjectBrick::class, $allBricks);
-        $this->assertNotContains(\Modules\Core\ReportBuilder\Bricks\DetailTasksBrick::class, $allBricks);
-        $this->assertNotContains(\Modules\Core\ReportBuilder\Bricks\DetailInvoiceProjectBrick::class, $allBricks);
-        $this->assertNotContains(\Modules\Core\ReportBuilder\Bricks\DetailQuoteProjectBrick::class, $allBricks);
+        $this->assertContains(HeaderProjectBrick::class, $allBricks);
+        $this->assertContains(DetailTasksBrick::class, $allBricks);
+        $this->assertContains(DetailInvoiceProjectBrick::class, $allBricks);
+        $this->assertContains(DetailQuoteProjectBrick::class, $allBricks);
     }
 
     #[Test]
@@ -162,9 +162,13 @@ class ReportBricksCollectionTest extends AbstractTestCase
 
         $this->assertContains(DetailInvoiceProductBrick::class, $detailBricks);
         $this->assertNotContains(DetailQuoteProductBrick::class, $detailBricks);
+        $this->assertContains(DetailInvoiceProjectBrick::class, $detailBricks);
+        $this->assertNotContains(DetailQuoteProjectBrick::class, $detailBricks);
 
         /* Untyped bricks stay available on every type */
         $this->assertContains(HeaderCompanyBrick::class, $headerBricks);
+        $this->assertContains(HeaderProjectBrick::class, $headerBricks);
+        $this->assertContains(DetailTasksBrick::class, $detailBricks);
     }
 
     #[Test]
@@ -180,6 +184,8 @@ class ReportBricksCollectionTest extends AbstractTestCase
 
         $this->assertContains(DetailQuoteProductBrick::class, $detailBricks);
         $this->assertNotContains(DetailInvoiceProductBrick::class, $detailBricks);
+        $this->assertContains(DetailQuoteProjectBrick::class, $detailBricks);
+        $this->assertNotContains(DetailInvoiceProjectBrick::class, $detailBricks);
         $this->assertNotContains(DetailCustomerAgingBrick::class, $detailBricks);
         $this->assertNotContains(DetailExpenseBrick::class, $detailBricks);
     }

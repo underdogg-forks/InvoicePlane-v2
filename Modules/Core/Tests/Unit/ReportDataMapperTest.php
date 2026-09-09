@@ -11,6 +11,10 @@ use Modules\Expenses\Models\ExpenseCategory;
 use Modules\Invoices\Models\Invoice;
 use Modules\Invoices\Models\InvoiceItem;
 use Modules\Products\Models\Product;
+use Modules\Projects\Enums\ProjectStatus;
+use Modules\Projects\Enums\TaskStatus;
+use Modules\Projects\Models\Project;
+use Modules\Projects\Models\Task;
 use Modules\Quotes\Models\Quote;
 use Modules\Quotes\Models\QuoteItem;
 use PHPUnit\Framework\Attributes\Test;
@@ -178,6 +182,209 @@ class ReportDataMapperTest extends AbstractCompanyPanelTestCase
         $numbers = collect($data['aging_items'])->pluck('invoice_number')->all();
         $this->assertNotContains('INV-DRAFT', $numbers);
         $this->assertNotContains('INV-PAID', $numbers);
+    }
+
+    #[Test]
+    public function it_populates_project_and_tasks_and_project_items_for_invoice_with_billed_tasks(): void
+    {
+        /* Arrange */
+        $relation = Relation::factory()->for($this->company)->create(['company_name' => 'Project Client']);
+        $project  = Project::factory()->for($this->company)->create([
+            'customer_id'    => $relation->id,
+            'project_name'   => 'Website Redesign',
+            'project_number' => 'PRJ-100',
+            'start_at'       => '2026-01-01',
+            'end_at'         => '2026-03-31',
+            'project_status' => ProjectStatus::ACTIVE,
+        ]);
+        $task = Task::factory()->for($this->company)->create([
+            'customer_id' => $relation->id,
+            'project_id'  => $project->id,
+            'task_number' => 'TSK-1',
+            'task_name'   => 'Design Homepage',
+            'description' => 'Wireframes & UI design',
+            'task_price'  => 500.00,
+            'due_at'      => '2026-02-15',
+            'task_status' => TaskStatus::COMPLETED,
+        ]);
+
+        $invoice = Invoice::factory()->for($this->company)->create([
+            'customer_id'    => $relation->id,
+            'invoice_number' => 'INV-PRJ-01',
+            'invoice_status' => 'draft',
+        ]);
+        $invoice->invoiceItems()->delete();
+
+        InvoiceItem::create([
+            'company_id'  => $this->company->id,
+            'invoice_id'  => $invoice->id,
+            'task_id'     => $task->id,
+            'item_name'   => 'Design Homepage',
+            'description' => 'Wireframes & UI design',
+            'quantity'    => 5,
+            'price'       => 100.00,
+            'subtotal'    => 500.00,
+            'tax_1'       => 0,
+            'tax_total'   => 0,
+            'total'       => 500.00,
+        ]);
+
+        /* Act */
+        $data = $this->mapper->forInvoice($invoice->fresh());
+
+        /* Assert */
+        $this->assertArrayHasKey('project', $data);
+        $this->assertSame('PRJ-100', $data['project']['project_number']);
+        $this->assertSame('Website Redesign', $data['project']['project_name']);
+        $this->assertSame('2026-01-01', $data['project']['start_at']);
+        $this->assertSame('2026-03-31', $data['project']['end_at']);
+
+        $this->assertArrayHasKey('tasks', $data);
+        $this->assertCount(1, $data['tasks']);
+        $this->assertSame('TSK-1', $data['tasks'][0]['task_number']);
+        $this->assertSame('Design Homepage', $data['tasks'][0]['task_name']);
+        $this->assertSame('Wireframes & UI design', $data['tasks'][0]['description']);
+        $this->assertSame('500.00', $data['tasks'][0]['task_price']);
+
+        $this->assertArrayHasKey('project_items', $data);
+        $this->assertCount(1, $data['project_items']);
+        $this->assertSame('Website Redesign', $data['project_items'][0]['project_name']);
+        $this->assertSame('Design Homepage', $data['project_items'][0]['task_name']);
+        $this->assertSame(5.0, $data['project_items'][0]['hours']);
+        $this->assertSame('100.00', $data['project_items'][0]['rate']);
+        $this->assertSame('500.00', $data['project_items'][0]['total']);
+    }
+
+    #[Test]
+    public function it_populates_project_and_tasks_from_customer_when_not_billed_on_invoice(): void
+    {
+        /* Arrange */
+        $relation = Relation::factory()->for($this->company)->create(['company_name' => 'Project Client']);
+        $project  = Project::factory()->for($this->company)->create([
+            'customer_id'    => $relation->id,
+            'project_name'   => 'Brand Audit',
+            'project_number' => 'PRJ-200',
+            'start_at'       => '2026-02-01',
+            'end_at'         => '2026-04-01',
+            'project_status' => ProjectStatus::PLANNED,
+        ]);
+        Task::factory()->for($this->company)->create([
+            'customer_id' => $relation->id,
+            'project_id'  => $project->id,
+            'task_number' => 'TSK-2',
+            'task_name'   => 'Audit Assets',
+            'description' => 'Review brand assets',
+            'task_price'  => 250.00,
+            'due_at'      => '2026-02-28',
+            'task_status' => TaskStatus::NOT_STARTED,
+        ]);
+
+        $invoice = Invoice::factory()->for($this->company)->create([
+            'customer_id'    => $relation->id,
+            'invoice_number' => 'INV-GEN-01',
+            'invoice_status' => 'draft',
+        ]);
+
+        /* Act */
+        $data = $this->mapper->forInvoice($invoice->fresh());
+
+        /* Assert */
+        $this->assertArrayHasKey('project', $data);
+        $this->assertSame('PRJ-200', $data['project']['project_number']);
+        $this->assertSame('Brand Audit', $data['project']['project_name']);
+
+        $this->assertArrayHasKey('tasks', $data);
+        $this->assertCount(1, $data['tasks']);
+        $this->assertSame('TSK-2', $data['tasks'][0]['task_number']);
+        $this->assertSame('Audit Assets', $data['tasks'][0]['task_name']);
+
+        $this->assertArrayHasKey('project_items', $data);
+        $this->assertCount(1, $data['project_items']);
+        $this->assertSame('Brand Audit', $data['project_items'][0]['project_name']);
+        $this->assertSame('Audit Assets', $data['project_items'][0]['task_name']);
+        $this->assertSame('250.00', $data['project_items'][0]['rate']);
+    }
+
+    #[Test]
+    public function it_returns_empty_project_and_tasks_when_customer_has_no_projects(): void
+    {
+        /* Arrange */
+        $relation = Relation::factory()->for($this->company)->create(['company_name' => 'Empty Client']);
+        $invoice  = Invoice::factory()->for($this->company)->create([
+            'customer_id'    => $relation->id,
+            'invoice_number' => 'INV-NO-PRJ',
+        ]);
+
+        /* Act */
+        $data = $this->mapper->forInvoice($invoice->fresh());
+
+        /* Assert */
+        $this->assertArrayHasKey('project', $data);
+        $this->assertSame('', $data['project']['project_number']);
+        $this->assertSame('', $data['project']['project_name']);
+        $this->assertSame([], $data['tasks']);
+        $this->assertSame([], $data['project_items']);
+    }
+
+    #[Test]
+    public function it_populates_project_and_tasks_and_project_items_for_quote(): void
+    {
+        /* Arrange */
+        $relation = Relation::factory()->for($this->company)->create(['company_name' => 'Quote Client']);
+        $project  = Project::factory()->for($this->company)->create([
+            'customer_id'    => $relation->id,
+            'project_name'   => 'Quote Project',
+            'project_number' => 'PRJ-Q-1',
+            'start_at'       => '2026-03-01',
+            'end_at'         => '2026-05-01',
+            'project_status' => ProjectStatus::PLANNED,
+        ]);
+        $task = Task::factory()->for($this->company)->create([
+            'customer_id' => $relation->id,
+            'project_id'  => $project->id,
+            'task_number' => 'TSK-Q-1',
+            'task_name'   => 'Scope Work',
+            'task_price'  => 300.00,
+            'task_status' => TaskStatus::NOT_STARTED,
+        ]);
+
+        $quote = Quote::factory()->for($this->company)->create([
+            'prospect_id'  => $relation->id,
+            'quote_number' => 'Q-PRJ-01',
+        ]);
+        $quote->quoteItems()->delete();
+
+        QuoteItem::create([
+            'company_id' => $this->company->id,
+            'quote_id'   => $quote->id,
+            'task_id'    => $task->id,
+            'item_name'  => 'Scope Work',
+            'quantity'   => 2,
+            'price'      => 150.00,
+            'subtotal'   => 300.00,
+            'tax_1'      => 0,
+            'tax_total'  => 0,
+            'total'      => 300.00,
+        ]);
+
+        /* Act */
+        $data = $this->mapper->forQuote($quote->fresh());
+
+        /* Assert */
+        $this->assertArrayHasKey('project', $data);
+        $this->assertSame('PRJ-Q-1', $data['project']['project_number']);
+        $this->assertSame('Quote Project', $data['project']['project_name']);
+
+        $this->assertArrayHasKey('tasks', $data);
+        $this->assertCount(1, $data['tasks']);
+        $this->assertSame('TSK-Q-1', $data['tasks'][0]['task_number']);
+
+        $this->assertArrayHasKey('project_items', $data);
+        $this->assertCount(1, $data['project_items']);
+        $this->assertSame('Quote Project', $data['project_items'][0]['project_name']);
+        $this->assertSame('Scope Work', $data['project_items'][0]['task_name']);
+        $this->assertSame(2.0, $data['project_items'][0]['hours']);
+        $this->assertSame('150.00', $data['project_items'][0]['rate']);
     }
 
     #[Test]
