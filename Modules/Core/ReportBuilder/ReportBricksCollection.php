@@ -4,6 +4,7 @@ namespace Modules\Core\ReportBuilder;
 
 use Modules\Core\Enums\ReportBand;
 use Modules\Core\Enums\ReportTemplateType;
+use Modules\Core\ReportBuilder\Bricks\DetailColumnLabelsBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailCustomerAgingBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailExpenseBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailInvoiceProductBrick;
@@ -120,6 +121,7 @@ class ReportBricksCollection
     public static function detail(): array
     {
         return [
+            DetailColumnLabelsBrick::class,
             DetailItemsBrick::class,
             DetailInvoiceProductBrick::class,
             DetailQuoteProductBrick::class,

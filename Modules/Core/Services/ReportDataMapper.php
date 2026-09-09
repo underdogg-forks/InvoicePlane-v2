@@ -38,7 +38,8 @@ class ReportDataMapper
             'company.communications',
             'customer.addresses',
             'customer.communications',
-            'invoiceItems.product',
+            'invoiceItems.product.productCategory',
+            'invoiceItems.taxRate',
             'payments',
             'expenses.expenseCategory',
             'expenses.vendor',
@@ -80,7 +81,8 @@ class ReportDataMapper
             'company.communications',
             'prospect.addresses',
             'prospect.communications',
-            'quoteItems.product',
+            'quoteItems.product.productCategory',
+            'quoteItems.taxRate',
         ]);
 
         return [
@@ -153,6 +155,10 @@ class ReportDataMapper
             'price'       => $this->money($item->price),
             'tax'         => $this->money($item->tax_total),
             'total'       => $this->money($item->total),
+            'category'    => (string) ($item->product?->productCategory?->category_name ?? ''),
+            'tax_rate'    => (string) ($item->taxRate?->name ?? ''),
+            'product'     => (string) ($item->product?->product_name ?? ($item->item_name ?: '')),
+            'sku'         => (string) ($item->product?->code ?? ''),
         ];
     }
 
@@ -171,6 +177,9 @@ class ReportDataMapper
             'tax'         => $this->money($item->tax_total),
             'discount'    => $this->money($item->discount ?? 0),
             'total'       => $this->money($item->total),
+            'category'    => (string) ($item->product?->productCategory?->category_name ?? ''),
+            'tax_rate'    => (string) ($item->taxRate?->name ?? ''),
+            'product'     => (string) ($item->product?->product_name ?? ($item->item_name ?: '')),
         ];
     }
 

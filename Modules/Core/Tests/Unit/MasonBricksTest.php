@@ -3,6 +3,7 @@
 namespace Modules\Core\Tests\Unit;
 
 use Modules\Core\Enums\ReportBlockWidth;
+use Modules\Core\ReportBuilder\Bricks\DetailColumnLabelsBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailInvoiceProductBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailItemsBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailQuoteProductBrick;
@@ -140,6 +141,48 @@ class MasonBricksTest extends AbstractTestCase
         /* Assert */
         $this->assertIsString($html);
         $this->assertStringContainsString('INV-001', $html);
+    }
+
+    #[Test]
+    public function it_detail_column_labels_brick_has_correct_id(): void
+    {
+        /* Act */
+        $id = DetailColumnLabelsBrick::getId();
+
+        /* Assert */
+        $this->assertEquals('detail_column_labels', $id);
+    }
+
+    #[Test]
+    public function it_detail_column_labels_brick_generates_preview_html(): void
+    {
+        /* Arrange */
+        $config = ['show_description' => true, 'show_quantity' => true, 'show_price' => true];
+
+        /* Act */
+        $html = DetailColumnLabelsBrick::toPreviewHtml($config);
+
+        /* Assert */
+        $this->assertIsString($html);
+        $this->assertStringContainsString(trans('ip.description'), $html);
+        $this->assertStringContainsString(trans('ip.quantity'), $html);
+        $this->assertStringContainsString(trans('ip.price'), $html);
+    }
+
+    #[Test]
+    public function it_detail_column_labels_brick_generates_render_html(): void
+    {
+        /* Arrange */
+        $config = ['show_description' => true, 'show_total' => true];
+        $data   = [];
+
+        /* Act */
+        $html = DetailColumnLabelsBrick::toHtml($config, $data);
+
+        /* Assert */
+        $this->assertIsString($html);
+        $this->assertStringContainsString(trans('ip.description'), $html);
+        $this->assertStringContainsString(trans('ip.total'), $html);
     }
 
     #[Test]
@@ -367,6 +410,7 @@ class MasonBricksTest extends AbstractTestCase
             HeaderCompanyBrick::class,
             HeaderClientBrick::class,
             HeaderInvoiceMetaBrick::class,
+            DetailColumnLabelsBrick::class,
             DetailItemsBrick::class,
             FooterTotalsBrick::class,
             FooterNotesBrick::class,
@@ -376,8 +420,8 @@ class MasonBricksTest extends AbstractTestCase
         $ids = array_map(fn ($brick) => $brick::getId(), $bricks);
 
         /* Assert */
-        $this->assertCount(6, array_unique($ids));
-        $this->assertCount(6, $ids);
+        $this->assertCount(7, array_unique($ids));
+        $this->assertCount(7, $ids);
     }
 
     #[Test]
@@ -388,6 +432,7 @@ class MasonBricksTest extends AbstractTestCase
             HeaderCompanyBrick::class,
             HeaderClientBrick::class,
             HeaderInvoiceMetaBrick::class,
+            DetailColumnLabelsBrick::class,
             DetailItemsBrick::class,
             FooterTotalsBrick::class,
             FooterNotesBrick::class,
@@ -409,6 +454,7 @@ class MasonBricksTest extends AbstractTestCase
             HeaderCompanyBrick::class,
             HeaderClientBrick::class,
             HeaderInvoiceMetaBrick::class,
+            DetailColumnLabelsBrick::class,
             DetailItemsBrick::class,
             FooterTotalsBrick::class,
             FooterNotesBrick::class,

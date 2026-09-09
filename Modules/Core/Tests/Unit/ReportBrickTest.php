@@ -3,6 +3,7 @@
 namespace Modules\Core\Tests\Unit;
 
 use Modules\Core\Enums\ReportBand;
+use Modules\Core\ReportBuilder\Bricks\DetailColumnLabelsBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailItemsBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterTotalsBrick;
 use Modules\Core\ReportBuilder\Bricks\HeaderCompanyBrick;
@@ -20,6 +21,7 @@ class ReportBrickTest extends AbstractTestCase
         /* Assert */
         $this->assertSame([ReportBand::HEADER, ReportBand::GROUP_HEADER], HeaderCompanyBrick::allowedBands());
         $this->assertSame([ReportBand::DETAILS], DetailItemsBrick::allowedBands());
+        $this->assertSame([ReportBand::HEADER, ReportBand::GROUP_HEADER, ReportBand::DETAILS], DetailColumnLabelsBrick::allowedBands());
         $this->assertSame([ReportBand::GROUP_FOOTER, ReportBand::FOOTER], FooterTotalsBrick::allowedBands());
     }
 

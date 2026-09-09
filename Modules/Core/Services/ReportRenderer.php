@@ -4,6 +4,7 @@ namespace Modules\Core\Services;
 
 use Modules\Core\Enums\ReportBand;
 use Modules\Core\Enums\ReportBlockWidth;
+use Modules\Core\Enums\ReportGroupBy;
 use Modules\Core\ReportBuilder\ReportBricksCollection;
 
 /**
@@ -19,13 +20,185 @@ class ReportRenderer
      */
     public function render(array $template, array $data): string
     {
-        $body = '';
+        $manifest = $template['manifest'] ?? [];
+        $groupBy  = $this->groupBy($manifest);
 
-        foreach (ReportBand::ordered() as $band) {
-            $body .= $this->renderBand($band, $template, $data);
+        if ($groupBy === null) {
+            $body = '';
+
+            foreach (ReportBand::ordered() as $band) {
+                $body .= $this->renderBand($band, $template, $data);
+            }
+
+            return $this->wrapDocument($body, (string) ($manifest['name'] ?? 'Report'));
         }
 
-        return $this->wrapDocument($body, (string) ($template['manifest']['name'] ?? 'Report'));
+        $body = $this->renderGroupedDocument($template, $data, $groupBy);
+
+        return $this->wrapDocument($body, (string) ($manifest['name'] ?? 'Report'));
+    }
+
+    protected function renderGroupedDocument(array $template, array $data, ReportGroupBy $groupBy): string
+    {
+        $body = '';
+
+        // Document-level header
+        $body .= $this->renderBand(ReportBand::HEADER, $template, $data);
+
+        // Partition items into groups preserving first-seen order
+        $groupKey = $groupBy->value;
+        $groups   = $this->extractGroupKeys($data, $groupKey);
+
+        foreach ($groups as $groupValue) {
+            $groupData = $this->buildGroupData($data, $groupKey, $groupValue);
+
+            $groupHtml = $this->renderBand(ReportBand::GROUP_HEADER, $template, $groupData)
+                . $this->renderBand(ReportBand::DETAILS, $template, $groupData)
+                . $this->renderBand(ReportBand::GROUP_FOOTER, $template, $groupData);
+
+            if ($groupHtml !== '') {
+                $style = $this->keepsGroupTogether($template['manifest'] ?? []) ? ' style="page-break-inside: avoid;"' : '';
+                $body .= '<div class="report-group"' . $style . '>' . $groupHtml . '</div>';
+            }
+        }
+
+        // Document-level footer
+        $body .= $this->renderBand(ReportBand::FOOTER, $template, $data);
+
+        return $body;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    protected function extractGroupKeys(array $data, string $groupKey): array
+    {
+        $seen = [];
+
+        $collections = [
+            $data['items'] ?? [],
+            $data['invoice_items'] ?? [],
+            $data['quote_items'] ?? [],
+            $data['expense_items'] ?? [],
+        ];
+
+        foreach ($collections as $collection) {
+            if ( ! is_array($collection)) {
+                continue;
+            }
+
+            foreach ($collection as $item) {
+                if ( ! is_array($item)) {
+                    continue;
+                }
+
+                $val = (string) ($item[$groupKey] ?? '');
+
+                if ( ! in_array($val, $seen, true)) {
+                    $seen[] = $val;
+                }
+            }
+        }
+
+        return $seen;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    protected function buildGroupData(array $data, string $groupKey, string $groupValue): array
+    {
+        $groupData = $data;
+
+        $filter = fn (mixed $collection): array => is_array($collection)
+            ? array_values(array_filter($collection, fn ($item): bool => is_array($item) && (string) ($item[$groupKey] ?? '') === $groupValue))
+            : [];
+
+        $groupItems        = $filter($data['items'] ?? []);
+        $groupInvoiceItems = $filter($data['invoice_items'] ?? []);
+        $groupQuoteItems   = $filter($data['quote_items'] ?? []);
+        $groupExpenseItems = $filter($data['expense_items'] ?? []);
+
+        $groupData['items']         = $groupItems;
+        $groupData['invoice_items'] = $groupInvoiceItems;
+        $groupData['quote_items']   = $groupQuoteItems;
+        $groupData['expense_items'] = $groupExpenseItems;
+
+        $label = $groupValue !== '' ? $groupValue : trans('ip.none');
+
+        $groupData['group'] = [
+            'field' => $groupKey,
+            'key'   => $groupValue,
+            'name'  => $label,
+            'label' => $label,
+            'value' => $groupValue,
+        ];
+
+        $itemsToSum = $groupItems !== []
+            ? $groupItems
+            : ($groupInvoiceItems !== [] ? $groupInvoiceItems : ($groupQuoteItems !== [] ? $groupQuoteItems : $groupExpenseItems));
+
+        $groupTotals = $this->calculateGroupTotals($itemsToSum);
+
+        $groupData['group_totals']    = $groupTotals;
+        $groupData['document_totals'] = $data['totals'] ?? [];
+
+        return $groupData;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $items
+     * @return array<string, string>
+     */
+    protected function calculateGroupTotals(array $items): array
+    {
+        $subtotal = 0.0;
+        $tax      = 0.0;
+        $total    = 0.0;
+
+        foreach ($items as $item) {
+            $itemTax   = (float) ($item['tax'] ?? 0);
+            $itemTotal = (float) ($item['total'] ?? ($item['amount'] ?? 0));
+            $tax += $itemTax;
+            $total += $itemTotal;
+
+            if (isset($item['subtotal'])) {
+                $subtotal += (float) $item['subtotal'];
+            } elseif (isset($item['unit_price'])) {
+                $subtotal += ((float) ($item['quantity'] ?? 1)) * (float) $item['unit_price'];
+            } elseif (isset($item['price'])) {
+                $subtotal += ((float) ($item['quantity'] ?? 1)) * (float) $item['price'];
+            } elseif (isset($item['amount'])) {
+                $subtotal += (float) $item['amount'];
+            } else {
+                $subtotal += $itemTotal - $itemTax;
+            }
+        }
+
+        return [
+            'subtotal' => number_format($subtotal, 2, '.', ''),
+            'tax'      => number_format($tax, 2, '.', ''),
+            'total'    => number_format($total, 2, '.', ''),
+        ];
+    }
+
+    protected function groupBy(array $manifest): ?ReportGroupBy
+    {
+        $value = $manifest['band_options'][ReportBand::DETAILS->value]['group_by'] ?? null;
+
+        if ($value instanceof ReportGroupBy) {
+            return $value;
+        }
+
+        return is_string($value) ? ReportGroupBy::tryFrom($value) : null;
+    }
+
+    protected function keepsGroupTogether(array $manifest): bool
+    {
+        return (bool) ($manifest['band_options']['group']['keep_together']
+            ?? $manifest['band_options'][ReportBand::DETAILS->value]['keep_together']
+            ?? false);
     }
 
     protected function renderBand(ReportBand $band, array $template, array $data): string

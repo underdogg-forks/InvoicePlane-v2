@@ -12,31 +12,33 @@
 
 <div class="{{ $itemsClass }}" style="font-size: {{ $config['font_size'] ?? 9 }}pt;">
     <table width="100%" cellpadding="4" cellspacing="0" border="1" style="border-collapse: collapse;">
-        <thead>
-            <tr style="background-color: #f3f4f6;">
-                @if($config['show_sku'] ?? true)
-                    <th align="left" width="12%">{{ trans('ip.sku') }}</th>
-                @endif
-                @if($config['show_description'] ?? true)
-                    <th align="left">{{ trans('ip.description') }}</th>
-                @endif
-                @if($config['show_quantity'] ?? true)
-                    <th align="center" width="10%">{{ trans('ip.quantity') }}</th>
-                @endif
-                @if($config['show_unit_price'] ?? true)
-                    <th align="right" width="12%">{{ trans('ip.unit_price') }}</th>
-                @endif
-                @if($config['show_tax'] ?? true)
-                    <th align="right" width="10%">{{ trans('ip.tax') }}</th>
-                @endif
-                @if($config['show_discount'] ?? false)
-                    <th align="right" width="10%">{{ trans('ip.discount') }}</th>
-                @endif
-                @if($config['show_total'] ?? true)
-                    <th align="right" width="12%">{{ trans('ip.total') }}</th>
-                @endif
-            </tr>
-        </thead>
+        @if($config['show_table_header'] ?? true)
+            <thead>
+                <tr style="background-color: #f3f4f6;">
+                    @if($config['show_sku'] ?? true)
+                        <th align="left" width="12%">{{ trans('ip.sku') }}</th>
+                    @endif
+                    @if($config['show_description'] ?? true)
+                        <th align="left">{{ trans('ip.description') }}</th>
+                    @endif
+                    @if($config['show_quantity'] ?? true)
+                        <th align="center" width="10%">{{ trans('ip.quantity') }}</th>
+                    @endif
+                    @if($config['show_unit_price'] ?? true)
+                        <th align="right" width="12%">{{ trans('ip.unit_price') }}</th>
+                    @endif
+                    @if($config['show_tax'] ?? true)
+                        <th align="right" width="10%">{{ trans('ip.tax') }}</th>
+                    @endif
+                    @if($config['show_discount'] ?? false)
+                        <th align="right" width="10%">{{ trans('ip.discount') }}</th>
+                    @endif
+                    @if($config['show_total'] ?? true)
+                        <th align="right" width="12%">{{ trans('ip.total') }}</th>
+                    @endif
+                </tr>
+            </thead>
+        @endif
         <tbody>
             @foreach(($data[$dataKey] ?? []) as $index => $item)
                 <tr style="{{ ($config['alternating_rows'] ?? true) && $index % 2 == 1 ? 'background-color: #f9fafb;' : '' }}">

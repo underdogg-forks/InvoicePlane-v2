@@ -2,6 +2,8 @@
 
 namespace Modules\Core\Tests\Unit;
 
+use Dompdf\Dompdf;
+use Dompdf\Options;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -10,6 +12,7 @@ use Modules\Clients\Models\Communication;
 use Modules\Clients\Models\Relation;
 use Modules\Core\Enums\ReportTemplateType;
 use Modules\Core\ReportBuilder\Bricks\DetailCustomerAgingBrick;
+use Modules\Core\ReportBuilder\Bricks\DetailColumnLabelsBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailItemsBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterNotesBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterTotalsBrick;
@@ -25,6 +28,8 @@ use Modules\Expenses\Models\ExpenseCategory;
 use Modules\Invoices\Models\Invoice;
 use Modules\Invoices\Models\InvoiceItem;
 use Modules\Payments\Models\Payment;
+use Modules\Products\Models\Product;
+use Modules\Products\Models\ProductCategory;
 use Modules\Quotes\Models\Quote;
 use PHPUnit\Framework\Attributes\Test;
 
@@ -122,6 +127,104 @@ class ReportBuilderVeteranChecklistTest extends AbstractCompanyPanelTestCase
         /* Assert */
         $this->assertNotEmpty($pdf);
         $this->assertStringStartsWith('%PDF', $pdf);
+    }
+
+    #[Test]
+    public function it_maps_every_invoice_item_through_the_full_render_pipeline_not_just_one(): void
+    {
+        /* Arrange */
+        $relation = Relation::factory()->for($this->company)->create(['company_name' => 'Ten Product Client']);
+        $invoice  = Invoice::factory()->for($this->company)->create(['customer_id' => $relation->id]);
+
+        for ($i = 1; $i <= 10; $i++) {
+            InvoiceItem::factory()->for($invoice)->create([
+                'item_name' => "Product {$i}",
+                'quantity'  => 1,
+                'price'     => 10.0,
+                'total'     => 10.0,
+            ]);
+        }
+
+        /* Act */
+        $data = $this->mapper->forInvoice($invoice->fresh());
+        $html = $this->pdfService->renderInvoiceHtml($invoice->fresh());
+
+        /* Assert */
+        $this->assertCount(10, $data['items'], 'ReportDataMapper must map all 10 items, not just one.');
+        $this->assertCount(10, $data['invoice_items']);
+
+        for ($i = 1; $i <= 10; $i++) {
+            $this->assertStringContainsString(
+                "Product {$i}",
+                $html,
+                "Product {$i} of 10 is missing from the rendered invoice — the detail band did not loop through every item.",
+            );
+        }
+
+        // Isolate DetailItemsBrick's own markup rather than the whole document
+        // (other bricks in header/footer also emit `<tr style=` rows) — 10 data
+        // rows + 1 <thead> title row.
+        $detailItemsHtml = DetailItemsBrick::toHtml([
+            'show_description' => true,
+            'show_quantity'    => true,
+            'show_price'       => true,
+            'show_tax'         => true,
+            'show_total'       => true,
+        ], $data);
+        $this->assertSame(11, mb_substr_count($detailItemsHtml, '<tr style='));
+    }
+
+    #[Test]
+    public function it_does_not_repeat_header_or_footer_bands_when_the_detail_band_spans_multiple_pages(): void
+    {
+        /*
+         * Documents current, verified behaviour (2026-09-09): the whole
+         * document is one flowed HTML blob (see ReportRenderer::render()),
+         * with no @page/position:running() CSS anywhere in this codebase.
+         * dompdf DOES paginate automatically once content overflows a
+         * page, but the Header/Footer bands are emitted exactly once each
+         * — they do not repeat on subsequent pages. This test locks that
+         * behaviour in so a future change to it is a deliberate, visible
+         * decision rather than a silent regression either way.
+         */
+
+        /* Arrange */
+        $relation = Relation::factory()->for($this->company)->create(['company_name' => 'PAGECOUNT-CLIENT-MARKER']);
+        $invoice  = Invoice::factory()->for($this->company)->create(['customer_id' => $relation->id]);
+
+        for ($i = 1; $i <= 60; $i++) {
+            InvoiceItem::factory()->for($invoice)->create([
+                'item_name' => "Row {$i}",
+                'quantity'  => 1,
+                'price'     => 100.0,
+                'total'     => 100.0,
+            ]);
+        }
+
+        /* Act */
+        $html = $this->pdfService->renderInvoiceHtml($invoice->fresh());
+
+        $options = new Options();
+        $options->setIsRemoteEnabled(false);
+        $options->setIsHtml5ParserEnabled(true);
+        $dompdf = new Dompdf($options);
+        $dompdf->setPaper('a4', 'portrait');
+        $dompdf->loadHtml($html);
+        $dompdf->render();
+
+        /* Assert */
+        $this->assertGreaterThan(
+            1,
+            $dompdf->getCanvas()->get_page_count(),
+            '60 line items should overflow onto more than one page — if this fails, dompdf pagination behaviour changed.',
+        );
+
+        $this->assertSame(
+            1,
+            mb_substr_count($html, 'PAGECOUNT-CLIENT-MARKER'),
+            'Header band content (client name) appears more than once — either it started repeating per page '
+            . '(update this test to reflect the new intended behaviour) or the fixture changed unexpectedly.',
+        );
     }
 
     #[Test]
@@ -659,5 +762,94 @@ class ReportBuilderVeteranChecklistTest extends AbstractCompanyPanelTestCase
         /* Assert */
         $this->assertArrayNotHasKey('unknown_future_setting', $sanitized['header'][0]['config']);
         $this->assertSame('full', $sanitized['details'][0]['width']);
+    }
+
+    #[Test]
+    public function it_rejects_and_sanitizes_invalid_group_by_values_on_template_load(): void
+    {
+        /* Arrange */
+        $invalidManifest = [
+            'name'         => 'Test Invalid GroupBy',
+            'type'         => 'invoice',
+            'band_options' => [
+                'details' => [
+                    'group_by'      => '../../etc/passwd',
+                    'keep_together' => true,
+                ],
+                'footer' => [
+                    'group_by' => 'arbitrary_unwhitelisted_column',
+                ],
+            ],
+        ];
+
+        /* Act */
+        $sanitized = $this->storage->sanitizeManifest($invalidManifest);
+
+        /* Assert */
+        $this->assertArrayNotHasKey('group_by', $sanitized['band_options']['details'] ?? []);
+        $this->assertTrue($sanitized['band_options']['details']['keep_together']);
+        $this->assertArrayNotHasKey('footer', $sanitized['band_options']);
+    }
+
+    #[Test]
+    public function it_renders_real_grouped_invoice_pdf_with_column_labels_and_group_totals(): void
+    {
+        /* Arrange */
+        $relation    = Relation::factory()->for($this->company)->create(['company_name' => 'Grouped Test Client']);
+        $catHardware = ProductCategory::factory()->for($this->company)->create(['category_name' => 'Hardware']);
+        $catSoftware = ProductCategory::factory()->for($this->company)->create(['category_name' => 'Software']);
+
+        $prodLaptop  = Product::factory()->for($this->company)->create(['product_name' => 'Laptop Pro', 'category_id' => $catHardware->id]);
+        $prodLicense = Product::factory()->for($this->company)->create(['product_name' => 'Cloud License', 'category_id' => $catSoftware->id]);
+
+        $invoice = Invoice::factory()->for($this->company)->create([
+            'customer_id'   => $relation->id,
+            'invoice_total' => 1500.0,
+        ]);
+
+        InvoiceItem::factory()->for($invoice)->create([
+            'product_id' => $prodLaptop->id,
+            'item_name'  => 'Laptop Pro',
+            'quantity'   => 1,
+            'price'      => 1000.0,
+            'total'      => 1000.0,
+        ]);
+
+        InvoiceItem::factory()->for($invoice)->create([
+            'product_id' => $prodLicense->id,
+            'item_name'  => 'Cloud License',
+            'quantity'   => 1,
+            'price'      => 500.0,
+            'total'      => 500.0,
+        ]);
+
+        $template = [
+            'manifest' => [
+                'name'         => 'Grouped Invoice',
+                'slug'         => 'grouped-invoice',
+                'type'         => 'invoice',
+                'band_options' => [
+                    'details' => ['group_by' => 'category'],
+                ],
+            ],
+            'bands' => [
+                'header'       => [['brick' => 'header_company', 'width' => 'full', 'config' => []]],
+                'group_header' => [['brick' => 'detail_column_labels', 'width' => 'full', 'config' => []]],
+                'details'      => [['brick' => 'detail_items', 'width' => 'full', 'config' => ['show_table_header' => false]]],
+                'group_footer' => [['brick' => 'footer_totals', 'width' => 'full', 'config' => []]],
+                'footer'       => [['brick' => 'footer_totals', 'width' => 'full', 'config' => []]],
+            ],
+        ];
+
+        /* Act */
+        $data = $this->mapper->forInvoice($invoice->fresh());
+        $html = $this->renderer->render($template, $data);
+
+        /* Assert */
+        $this->assertStringContainsString('Hardware', $data['items'][0]['category']);
+        $this->assertStringContainsString('Software', $data['items'][1]['category']);
+        $this->assertSame(2, mb_substr_count($html, 'class="report-group"'));
+        $this->assertStringContainsString('1000.00', $html);
+        $this->assertStringContainsString('500.00', $html);
     }
 }

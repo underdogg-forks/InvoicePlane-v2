@@ -86,6 +86,9 @@ abstract class AbstractDetailProductBrick extends ReportBrick
                 Checkbox::make('show_total')
                     ->label(trans('ip.show_total'))
                     ->default(true),
+                Checkbox::make('show_table_header')
+                    ->label(trans('ip.show_table_header'))
+                    ->default(true),
                 Checkbox::make('alternating_rows')
                     ->label(trans('ip.alternating_rows'))
                     ->default(true),

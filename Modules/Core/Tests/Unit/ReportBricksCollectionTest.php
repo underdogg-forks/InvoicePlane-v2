@@ -4,6 +4,7 @@ namespace Modules\Core\Tests\Unit;
 
 use Modules\Core\Enums\ReportBand;
 use Modules\Core\Enums\ReportTemplateType;
+use Modules\Core\ReportBuilder\Bricks\DetailColumnLabelsBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailCustomerAgingBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailExpenseBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailInvoiceProductBrick;
@@ -33,7 +34,7 @@ class ReportBricksCollectionTest extends AbstractTestCase
 
         /* Assert */
         $this->assertIsArray($bricks);
-        $this->assertCount(15, $bricks);
+        $this->assertCount(16, $bricks);
     }
 
     #[Test]
@@ -59,7 +60,8 @@ class ReportBricksCollectionTest extends AbstractTestCase
 
         /* Assert */
         $this->assertIsArray($detailBricks);
-        $this->assertCount(5, $detailBricks);
+        $this->assertCount(6, $detailBricks);
+        $this->assertContains(DetailColumnLabelsBrick::class, $detailBricks);
         $this->assertContains(DetailItemsBrick::class, $detailBricks);
         $this->assertContains(DetailInvoiceProductBrick::class, $detailBricks);
         $this->assertContains(DetailQuoteProductBrick::class, $detailBricks);

@@ -5,6 +5,7 @@
 
 <div class="line-items" style="font-size: {{ $config['font_size'] ?? 9 }}pt;">
     <table width="100%" cellpadding="4" cellspacing="0" border="1" style="border-collapse: collapse;">
+@if($config['show_table_header'] ?? true)
         <thead>
             <tr style="background-color: #f3f4f6;">
                 @if($config['show_description'] ?? true)
@@ -24,6 +25,7 @@
                 @endif
             </tr>
         </thead>
+@endif
         <tbody>
             @foreach(($data['items'] ?? []) as $index => $item)
                 <tr style="{{ ($config['alternating_rows'] ?? true) && $index % 2 == 1 ? 'background-color: #f9fafb;' : '' }}">

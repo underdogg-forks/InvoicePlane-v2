@@ -10,6 +10,7 @@ use InvalidArgumentException;
 use JsonException;
 use Modules\Core\Enums\ReportBand;
 use Modules\Core\Enums\ReportBlockWidth;
+use Modules\Core\Enums\ReportGroupBy;
 use Modules\Core\Enums\ReportTemplateType;
 use Modules\Core\ReportBuilder\ReportBricksCollection;
 use RuntimeException;
@@ -56,7 +57,7 @@ class ReportTemplateStorage
                     'scope'    => self::SCOPE_SYSTEM,
                     'type'     => $typeValue,
                     'slug'     => basename($directory),
-                    'manifest' => $manifest,
+                    'manifest' => $this->sanitizeManifest($manifest),
                 ];
             }
         }
@@ -88,7 +89,7 @@ class ReportTemplateStorage
                 'scope'    => self::SCOPE_COMPANY,
                 'type'     => (string) ($manifest['type'] ?? ''),
                 'slug'     => basename($directory),
-                'manifest' => $manifest,
+                'manifest' => $this->sanitizeManifest($manifest),
             ];
         }
 
@@ -143,7 +144,7 @@ class ReportTemplateStorage
         $bands = $this->readJson($base . '/bands.json') ?? [];
 
         return [
-            'manifest' => $manifest,
+            'manifest' => $this->sanitizeManifest($manifest),
             'bands'    => $this->sanitizeBands($bands, $type),
         ];
     }
@@ -158,8 +159,51 @@ class ReportTemplateStorage
         $base = $this->path($scope, $slug, $type);
         $disk = Storage::disk(self::DISK);
 
-        $disk->put($base . '/manifest.json', $this->encodeJson($manifest));
+        $disk->put($base . '/manifest.json', $this->encodeJson($this->sanitizeManifest($manifest)));
         $disk->put($base . '/bands.json', $this->encodeJson($this->sanitizeBands($bands, $type)));
+    }
+
+    /**
+     * Sanitize manifest options (e.g. band_options.details.group_by against allowed enums).
+     *
+     * @param array<string, mixed> $manifest
+     * @return array<string, mixed>
+     */
+    public function sanitizeManifest(array $manifest): array
+    {
+        if (isset($manifest['band_options']) && is_array($manifest['band_options'])) {
+            $sanitizedOptions = [];
+
+            foreach ($manifest['band_options'] as $bandKey => $options) {
+                if ( ! is_array($options)) {
+                    continue;
+                }
+
+                $sanitized = [];
+
+                if (isset($options['keep_together'])) {
+                    $sanitized['keep_together'] = (bool) $options['keep_together'];
+                }
+
+                if (isset($options['group_by'])) {
+                    $groupBy = is_string($options['group_by'])
+                        ? ReportGroupBy::tryFrom($options['group_by'])
+                        : ($options['group_by'] instanceof ReportGroupBy ? $options['group_by'] : null);
+
+                    if ($groupBy !== null) {
+                        $sanitized['group_by'] = $groupBy->value;
+                    }
+                }
+
+                if ($sanitized !== []) {
+                    $sanitizedOptions[$bandKey] = $sanitized;
+                }
+            }
+
+            $manifest['band_options'] = $sanitizedOptions;
+        }
+
+        return $manifest;
     }
 
     /**
