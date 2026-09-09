@@ -167,6 +167,7 @@ class ReportTemplateStorage
      * Sanitize manifest options (e.g. band_options.details.group_by against allowed enums).
      *
      * @param array<string, mixed> $manifest
+     *
      * @return array<string, mixed>
      */
     public function sanitizeManifest(array $manifest): array

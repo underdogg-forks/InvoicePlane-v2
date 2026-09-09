@@ -105,6 +105,7 @@ class ReportRenderer
 
     /**
      * @param array<string, mixed> $data
+     *
      * @return array<string, mixed>
      */
     protected function buildGroupData(array $data, string $groupKey, string $groupValue): array
@@ -149,6 +150,7 @@ class ReportRenderer
 
     /**
      * @param array<int, array<string, mixed>> $items
+     *
      * @return array<string, string>
      */
     protected function calculateGroupTotals(array $items): array

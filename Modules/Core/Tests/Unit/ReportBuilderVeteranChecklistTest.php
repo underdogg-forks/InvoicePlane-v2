@@ -12,7 +12,6 @@ use Modules\Clients\Models\Communication;
 use Modules\Clients\Models\Relation;
 use Modules\Core\Enums\ReportTemplateType;
 use Modules\Core\ReportBuilder\Bricks\DetailCustomerAgingBrick;
-use Modules\Core\ReportBuilder\Bricks\DetailColumnLabelsBrick;
 use Modules\Core\ReportBuilder\Bricks\DetailItemsBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterNotesBrick;
 use Modules\Core\ReportBuilder\Bricks\FooterTotalsBrick;
@@ -806,6 +805,8 @@ class ReportBuilderVeteranChecklistTest extends AbstractCompanyPanelTestCase
             'customer_id'   => $relation->id,
             'invoice_total' => 1500.0,
         ]);
+
+        $invoice->invoiceItems()->delete();
 
         InvoiceItem::factory()->for($invoice)->create([
             'product_id' => $prodLaptop->id,

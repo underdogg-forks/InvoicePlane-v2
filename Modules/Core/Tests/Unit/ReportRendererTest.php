@@ -116,7 +116,7 @@ class ReportRendererTest extends AbstractTestCase
             ],
         ]);
 
-        $data = $this->data();
+        $data          = $this->data();
         $data['items'] = [
             ['description' => 'Consulting 1', 'category' => 'Services', 'quantity' => 1, 'price' => '100.00', 'tax' => '20.00', 'total' => '120.00'],
             ['description' => 'Laptop', 'category' => 'Hardware', 'quantity' => 2, 'price' => '500.00', 'tax' => '100.00', 'total' => '1100.00'],
@@ -164,7 +164,7 @@ class ReportRendererTest extends AbstractTestCase
             ],
         ]);
 
-        $data = $this->data();
+        $data          = $this->data();
         $data['items'] = [
             ['description' => 'Zeta Item', 'category' => 'Zeta', 'quantity' => 1, 'price' => '10.00', 'tax' => '0.00', 'total' => '10.00'],
             ['description' => 'Alpha Item', 'category' => 'Alpha', 'quantity' => 1, 'price' => '20.00', 'tax' => '0.00', 'total' => '20.00'],
@@ -198,7 +198,7 @@ class ReportRendererTest extends AbstractTestCase
             ],
         ]);
 
-        $data = $this->data();
+        $data          = $this->data();
         $data['items'] = [
             ['description' => 'Item 1', 'category' => 'A', 'quantity' => 1, 'price' => '10.00', 'tax' => '0.00', 'total' => '10.00'],
         ];
@@ -225,7 +225,7 @@ class ReportRendererTest extends AbstractTestCase
             ],
         ]);
 
-        $data = $this->data();
+        $data          = $this->data();
         $data['items'] = [];
 
         /* Act */

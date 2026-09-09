@@ -161,6 +161,26 @@ class PdfGenerationServiceTest extends AbstractCompanyPanelTestCase
         $this->assertSame(file_get_contents($fixture), $html);
     }
 
+    #[Test]
+    public function it_matches_the_golden_html_snapshot_for_the_grouped_invoice_template(): void
+    {
+        /* Arrange */
+        $fixture = __DIR__ . '/../Fixtures/report-templates/invoice-grouped-by-category.html';
+        $invoice = $this->goldenGroupedInvoice();
+
+        /* Act */
+        $html = $this->service->renderInvoiceHtml($invoice);
+
+        if ( ! is_file($fixture)) {
+            @mkdir(dirname($fixture), 0775, true);
+            file_put_contents($fixture, $html);
+            $this->markTestIncomplete('Golden fixture created — rerun to verify.');
+        }
+
+        /* Assert */
+        $this->assertSame(file_get_contents($fixture), $html);
+    }
+
     protected function goldenInvoice(): Invoice
     {
         $this->company->update(['vat_number' => 'VAT-GOLD-1', 'logo' => null]);
@@ -280,6 +300,140 @@ class PdfGenerationServiceTest extends AbstractCompanyPanelTestCase
 
         /** @var \Modules\Quotes\Models\Quote $fresh */
         $fresh = $quote->fresh();
+
+        return $fresh;
+    }
+
+    protected function goldenGroupedInvoice(): Invoice
+    {
+        $this->company->update(['vat_number' => 'VAT-GOLD-1', 'logo' => null]);
+
+        $taxRate = \Modules\Core\Models\TaxRate::factory()->for($this->company)->create([
+            'name'      => 'VAT Standard',
+            'rate'      => 21.00,
+            'is_active' => true,
+        ]);
+
+        $catHardware = \Modules\Products\Models\ProductCategory::factory()->for($this->company)->create([
+            'category_name' => 'Hardware',
+        ]);
+        $catServices = \Modules\Products\Models\ProductCategory::factory()->for($this->company)->create([
+            'category_name' => 'Services',
+        ]);
+
+        $prodHardware = \Modules\Products\Models\Product::factory()->for($this->company)->create([
+            'category_id'  => $catHardware->id,
+            'product_name' => 'Golden Server',
+            'code'         => 'SRV-01',
+        ]);
+        $prodService = \Modules\Products\Models\Product::factory()->for($this->company)->create([
+            'category_id'  => $catServices->id,
+            'product_name' => 'Setup Service',
+            'code'         => 'SRV-SETUP',
+        ]);
+
+        $relation = Relation::factory()->for($this->company)->create([
+            'company_name' => 'Golden Client Ltd',
+        ]);
+
+        $relation->addresses()->delete();
+        $relation->addresses()->create([
+            'company_id'   => $this->company->id,
+            'address_type' => 'billing',
+            'address_1'    => 'Golden Street 1',
+            'postal_code'  => '1234 AB',
+            'city'         => 'Goldenburg',
+            'country'      => 'NL',
+        ]);
+
+        app(ReportTemplateStorage::class)->save(
+            ReportTemplateStorage::SCOPE_COMPANY,
+            'grouped-by-category',
+            [
+                'name'         => 'Grouped by Category',
+                'slug'         => 'grouped-by-category',
+                'type'         => 'invoice',
+                'band_options' => [
+                    'details' => ['group_by' => 'category'],
+                ],
+            ],
+            [
+                'header' => [
+                    ['brick' => 'header_company', 'width' => 'half', 'config' => []],
+                    ['brick' => 'header_client', 'width' => 'half', 'config' => []],
+                    ['brick' => 'header_invoice_meta', 'width' => 'full', 'config' => []],
+                ],
+                'group_header' => [
+                    ['brick' => 'detail_column_labels', 'width' => 'full', 'config' => []],
+                ],
+                'details' => [
+                    ['brick' => 'detail_items', 'width' => 'full', 'config' => ['show_table_header' => false]],
+                ],
+                'group_footer' => [
+                    ['brick' => 'footer_totals', 'width' => 'full', 'config' => []],
+                ],
+                'footer' => [
+                    ['brick' => 'footer_totals', 'width' => 'full', 'config' => []],
+                    ['brick' => 'footer_notes', 'width' => 'full', 'config' => []],
+                ],
+            ],
+            \Modules\Core\Enums\ReportTemplateType::INVOICE,
+        );
+
+        $invoice = Invoice::factory()->for($this->company)->create([
+            'customer_id'              => $relation->id,
+            'user_id'                  => $this->user->id,
+            'invoice_number'           => 'INV-GOLD-GRP-0001',
+            'invoice_status'           => 'sent',
+            'invoice_sign'             => '1',
+            'invoiced_at'              => '2026-01-01',
+            'invoice_due_at'           => '2026-01-31',
+            'invoice_discount_amount'  => 0,
+            'invoice_discount_percent' => 0,
+            'invoice_item_subtotal'    => 300.0000,
+            'item_tax_total'           => 63.0000,
+            'invoice_tax_total'        => 63.0000,
+            'invoice_total'            => 363.0000,
+            'template'                 => 'grouped-by-category',
+            'summary'                  => 'Golden grouped summary',
+            'terms'                    => 'Golden grouped terms',
+            'footer'                   => 'Golden grouped footer',
+        ]);
+
+        $invoice->invoiceItems()->delete();
+
+        InvoiceItem::create([
+            'company_id'  => $this->company->id,
+            'invoice_id'  => $invoice->id,
+            'tax_rate_id' => $taxRate->id,
+            'product_id'  => $prodHardware->id,
+            'item_name'   => 'Golden Server',
+            'quantity'    => 1,
+            'price'       => 200.0000,
+            'subtotal'    => 200.0000,
+            'tax_1'       => 42.0000,
+            'tax_2'       => 0,
+            'tax_total'   => 42.0000,
+            'total'       => 242.0000,
+        ]);
+
+        InvoiceItem::create([
+            'company_id'  => $this->company->id,
+            'invoice_id'  => $invoice->id,
+            'tax_rate_id' => $taxRate->id,
+            'product_id'  => $prodService->id,
+            'item_name'   => 'Setup Service',
+            'quantity'    => 1,
+            'price'       => 100.0000,
+            'subtotal'    => 100.0000,
+            'tax_1'       => 21.0000,
+            'tax_2'       => 0,
+            'tax_total'   => 21.0000,
+            'total'       => 121.0000,
+        ]);
+
+        /** @var Invoice $fresh */
+        $fresh = $invoice->fresh();
 
         return $fresh;
     }

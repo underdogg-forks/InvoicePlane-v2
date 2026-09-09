@@ -11,7 +11,15 @@ enum ReportGroupBy: string implements LabeledEnum
     case PRODUCT  = 'product';
     case SKU      = 'sku';
 
-    public function getLabel(): string
+    /**
+     * @return array<string>
+     */
+    public static function values(): array
+    {
+        return array_column(self::cases(), 'value');
+    }
+
+    public function label(): string
     {
         return match ($this) {
             self::CATEGORY => trans('ip.group_by_category'),
@@ -21,11 +29,13 @@ enum ReportGroupBy: string implements LabeledEnum
         };
     }
 
-    /**
-     * @return array<string>
-     */
-    public static function values(): array
+    public function color(): string
     {
-        return array_column(self::cases(), 'value');
+        return 'primary';
+    }
+
+    public function getLabel(): string
+    {
+        return $this->label();
     }
 }
