@@ -16,12 +16,13 @@ use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\HtmlString;
 use Modules\Core\Enums\ReportBand;
-use Modules\Core\Enums\ReportBlockWidth;
 use Modules\Core\Enums\ReportTemplateType;
 use Modules\Core\ReportBuilder\MasonDocumentConverter;
 use Modules\Core\ReportBuilder\ReportBrickAction;
 use Modules\Core\ReportBuilder\ReportBricksCollection;
+use Modules\Core\Services\ReportRenderer;
 use Modules\Core\Services\ReportTemplateStorage;
+use Throwable;
 
 /**
  * Shared five-band report builder page. One Mason canvas per band, each
@@ -145,7 +146,7 @@ abstract class BaseReportBuilderPage extends Page implements HasForms
             );
 
             Notification::make()->title(trans('ip.template_saved'))->success()->send();
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             Log::warning("Report template save failed: {$e->getMessage()}", ['exception' => $e]);
             Notification::make()->title(trans('ip.template_save_failed'))->danger()->send();
 
@@ -254,42 +255,13 @@ abstract class BaseReportBuilderPage extends Page implements HasForms
 
     protected function renderPreviewHtml(): string
     {
-        $html = '';
+        $bands = [];
 
         foreach (ReportBand::ordered() as $band) {
-            $bandHtml = '';
-
-            foreach (MasonDocumentConverter::toBandEntries($this->data['bands'][$band->value] ?? []) as $entry) {
-                $brickClass = ReportBricksCollection::findById($entry['brick']);
-
-                if ($brickClass === null) {
-                    continue;
-                }
-
-                $config = $entry['config'];
-                // Preserve width for preview rendering
-                if ( ! isset($config[MasonDocumentConverter::WIDTH_KEY])) {
-                    $config[MasonDocumentConverter::WIDTH_KEY] = $entry['width'] ?? 'full';
-                }
-
-                $width   = ReportBlockWidth::tryFrom((string) ($config[MasonDocumentConverter::WIDTH_KEY] ?? '')) ?? ReportBlockWidth::FULL;
-                $percent = match ($width) {
-                    ReportBlockWidth::ONE_THIRD  => '33.33%',
-                    ReportBlockWidth::HALF       => '50%',
-                    ReportBlockWidth::TWO_THIRDS => '66.66%',
-                    ReportBlockWidth::FULL       => '100%',
-                };
-
-                $previewHtml = (string) $brickClass::toPreviewHtml($config);
-                $bandHtml .= '<div style="flex: 0 0 ' . $percent . '; max-width: ' . $percent . '; padding-right: 8px; box-sizing: border-box;">' . $previewHtml . '</div>';
-            }
-
-            if ($bandHtml) {
-                $html .= '<div style="display: flex; flex-wrap: wrap; gap: 0; margin-bottom: 16px;">' . $bandHtml . '</div>';
-            }
+            $bands[$band->value] = MasonDocumentConverter::toBandEntries($this->data['bands'][$band->value] ?? []);
         }
 
-        return $html;
+        return app(ReportRenderer::class)->renderPreview($bands);
     }
 
     /**

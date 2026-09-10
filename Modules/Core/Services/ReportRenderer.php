@@ -40,6 +40,26 @@ class ReportRenderer
         return $this->wrapDocument($body, (string) ($manifest['name'] ?? 'Report'));
     }
 
+    /**
+     * Render band entries for the builder's live preview. Same band iteration,
+     * row packing and per-brick isolation as render(), but each brick shows
+     * its toPreviewHtml() (no entity data) and there is no document wrapper —
+     * so the preview and the print output can never drift apart on layout.
+     *
+     * @param array<string, array<int, array{brick: string, width: string, config: array}>> $bands
+     */
+    public function renderPreview(array $bands): string
+    {
+        $template = ['manifest' => [], 'bands' => $bands];
+        $body     = '';
+
+        foreach (ReportBand::ordered() as $band) {
+            $body .= $this->renderBand($band, $template, [], preview: true);
+        }
+
+        return $body;
+    }
+
     protected function renderGroupedDocument(array $template, array $data, ReportGroupBy $groupBy): string
     {
         $body = '';
@@ -216,7 +236,7 @@ class ReportRenderer
             ?? false);
     }
 
-    protected function renderBand(ReportBand $band, array $template, array $data): string
+    protected function renderBand(ReportBand $band, array $template, array $data, bool $preview = false): string
     {
         $entries = $template['bands'][$band->value] ?? [];
 
@@ -240,8 +260,8 @@ class ReportRenderer
 
         foreach ($entries as $entry) {
             if (($entry['brick'] ?? null) === 'page_break') {
-                $html .= $this->renderRows($segment, $data);
-                $html .= $this->renderBrickSafely(\Modules\Core\ReportBuilder\Bricks\PageBreakBrick::class, $entry['config'] ?? [], $data);
+                $html .= $this->renderRows($segment, $data, $preview);
+                $html .= $this->renderBrickSafely(\Modules\Core\ReportBuilder\Bricks\PageBreakBrick::class, $entry['config'] ?? [], $data, $preview);
                 $segment = [];
 
                 continue;
@@ -250,18 +270,18 @@ class ReportRenderer
             $segment[] = $entry;
         }
 
-        $html .= $this->renderRows($segment, $data);
+        $html .= $this->renderRows($segment, $data, $preview);
         $html .= '</div>';
 
         return $html;
     }
 
-    protected function renderRows(array $entries, array $data): string
+    protected function renderRows(array $entries, array $data, bool $preview = false): string
     {
         $html = '';
 
         foreach ($this->chunkIntoRows($entries) as $row) {
-            $html .= $this->renderRow($row, $data);
+            $html .= $this->renderRow($row, $data, $preview);
         }
 
         return $html;
@@ -306,7 +326,7 @@ class ReportRenderer
     /**
      * @param array<int, array{entry: array, width: ReportBlockWidth}> $row
      */
-    protected function renderRow(array $row, array $data): string
+    protected function renderRow(array $row, array $data, bool $preview = false): string
     {
         $cells = '';
 
@@ -318,7 +338,7 @@ class ReportRenderer
             }
 
             $config  = is_array($block['entry']['config'] ?? null) ? $block['entry']['config'] : [];
-            $inner   = $this->renderBrickSafely($brickClass, $config, $data);
+            $inner   = $this->renderBrickSafely($brickClass, $config, $data, $preview);
             $percent = (int) round($block['width']->getGridWidth() / 12 * 100);
 
             $cells .= '<td class="report-block" style="width: ' . $percent . '%; vertical-align: top; padding: 0;">'
@@ -332,12 +352,16 @@ class ReportRenderer
     /**
      * @param class-string<\Modules\Core\ReportBuilder\ReportBrick>|string $brickClass
      */
-    protected function renderBrickSafely(string $brickClass, array $config, array $data): string
+    protected function renderBrickSafely(string $brickClass, array $config, array $data, bool $preview = false): string
     {
         $id = method_exists($brickClass, 'getId') ? $brickClass::getId() : $brickClass;
 
         try {
             $filteredConfig = method_exists($brickClass, 'filterConfig') ? $brickClass::filterConfig($config) : $config;
+
+            if ($preview && method_exists($brickClass, 'toPreviewHtml')) {
+                return (string) $brickClass::toPreviewHtml($filteredConfig);
+            }
 
             return (string) $brickClass::toHtml($filteredConfig, $data);
         } catch (Throwable $e) {

@@ -5,6 +5,7 @@ namespace Modules\Core\Tests\Feature;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
+use Mockery;
 use Modules\Core\Enums\ReportTemplateType;
 use Modules\Core\Filament\Admin\Pages\ReportBuilder;
 use Modules\Core\Filament\Admin\Pages\ReportTemplates;
@@ -14,6 +15,7 @@ use Modules\Core\Services\ReportTemplateStorage;
 use Modules\Core\Tests\AbstractAdminPanelTestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
+use RuntimeException;
 
 class AdminReportBuilderTest extends AbstractAdminPanelTestCase
 {
@@ -38,14 +40,14 @@ class AdminReportBuilderTest extends AbstractAdminPanelTestCase
                     ['brick' => 'header_company', 'width' => 'half', 'config' => []],
                     ['brick' => 'header_client', 'width' => 'half', 'config' => []],
                 ],
-                ['flex: 0 0 50%', 'flex: 0 0 50%'],
+                ['width: 50%'],
             ],
             'one third and two thirds' => [
                 [
                     ['brick' => 'header_company', 'width' => 'one_third', 'config' => []],
                     ['brick' => 'header_client', 'width' => 'two_thirds', 'config' => []],
                 ],
-                ['flex: 0 0 33.33%', 'flex: 0 0 66.66%'],
+                ['width: 33%', 'width: 67%'],
             ],
         ];
     }
@@ -163,7 +165,7 @@ class AdminReportBuilderTest extends AbstractAdminPanelTestCase
     public function it_sends_danger_notification_and_logs_when_template_save_fails(): void
     {
         /* Arrange */
-        $fakeDisk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $fakeDisk = Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
         $fakeDisk->shouldReceive('put')->andReturn(false);
         $fakeDisk->shouldReceive('exists')->andReturn(true);
         $fakeDisk->shouldReceive('get')->andReturn(json_encode(['name' => 'Default Invoice', 'type' => 'invoice']));
@@ -174,7 +176,7 @@ class AdminReportBuilderTest extends AbstractAdminPanelTestCase
             ->test(ReportBuilder::class, ['scope' => 'system', 'type' => 'invoice', 'slug' => 'default']);
 
         /* Assert */
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Failed to write report template');
 
         /* Act */
@@ -260,7 +262,7 @@ class AdminReportBuilderTest extends AbstractAdminPanelTestCase
 
     #[Test]
     #[DataProvider('bandWidthsProvider')]
-    public function it_renders_preview_modal_with_correct_flex_width_wrappers(array $bandEntries, array $expectedFlexStyles): void
+    public function it_renders_preview_modal_with_correct_grid_width_wrappers(array $bandEntries, array $expectedFlexStyles): void
     {
         /* Arrange */
         $this->storage->save(

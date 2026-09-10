@@ -2,9 +2,11 @@
 
 namespace Modules\Core\Tests\Unit;
 
+use Mockery;
 use Modules\Core\Services\ReportRenderer;
 use Modules\Core\Tests\AbstractTestCase;
 use PHPUnit\Framework\Attributes\Test;
+use RuntimeException;
 
 class ReportRendererTest extends AbstractTestCase
 {
@@ -244,9 +246,9 @@ class ReportRendererTest extends AbstractTestCase
         /* Arrange */
         \Illuminate\Support\Facades\Log::shouldReceive('warning')
             ->once()
-            ->with(\Mockery::pattern('/Report brick throwing_brick failed: Boom/'), \Mockery::any());
+            ->with(Mockery::pattern('/Report brick throwing_brick failed: Boom/'), Mockery::any());
 
-        $throwingBrick = new class {
+        $throwingBrick = new class () {
             public static function getId(): string
             {
                 return 'throwing_brick';
@@ -254,11 +256,11 @@ class ReportRendererTest extends AbstractTestCase
 
             public static function toHtml(array $config, array $data): string
             {
-                throw new \RuntimeException('Boom');
+                throw new RuntimeException('Boom');
             }
         };
 
-        $renderer = new class extends ReportRenderer {
+        $renderer = new class () extends ReportRenderer {
             public function callRenderBrickSafely(string $brickClass, array $config, array $data): string
             {
                 return $this->renderBrickSafely($brickClass, $config, $data);
@@ -299,6 +301,91 @@ class ReportRendererTest extends AbstractTestCase
         $this->assertSame(1, mb_substr_count($html, 'report-band-details'));
         $this->assertStringContainsString('report-band-header', $html);
         $this->assertStringContainsString('report-band-footer', $html);
+    }
+
+    #[Test]
+    public function preview_uses_the_same_row_grid_as_print_and_omits_the_document_wrapper(): void
+    {
+        /* Arrange */
+        $bands = [
+            'header' => [
+                ['brick' => 'header_company', 'width' => 'half', 'config' => []],
+                ['brick' => 'header_client', 'width' => 'half', 'config' => []],
+            ],
+            'group_header' => [],
+            'details'      => [],
+            'group_footer' => [],
+            'footer'       => [],
+        ];
+
+        /* Act */
+        $preview = $this->renderer->renderPreview($bands);
+        $print   = $this->renderer->render($this->template(['header' => $bands['header']]), $this->data());
+
+        /* Assert — preview shares renderRow()/chunkIntoRows() with print … */
+        $this->assertStringContainsString('class="report-row"', $preview);
+        $this->assertSame(2, mb_substr_count($preview, 'class="report-block"'));
+        $this->assertStringContainsString('width: 50%', $preview);
+        $this->assertSame(
+            mb_substr_count($print, 'class="report-block"'),
+            mb_substr_count($preview, 'class="report-block"'),
+            'preview and print must pack the same bricks into the same number of grid cells',
+        );
+
+        /* … but has no <html>/<style> document shell */
+        $this->assertStringNotContainsString('<!DOCTYPE html>', $preview);
+        $this->assertStringNotContainsString('<style>', $preview);
+    }
+
+    #[Test]
+    public function preview_renders_each_brick_via_to_preview_html_not_to_html(): void
+    {
+        /* Arrange */
+        $config = ['footer_content' => '<p>PREVIEW BODY</p>'];
+        $bands  = ['footer' => [['brick' => 'footer_notes', 'width' => 'full', 'config' => $config]]];
+
+        /* Act */
+        $preview = $this->renderer->renderPreview($bands + [
+            'header' => [], 'group_header' => [], 'details' => [], 'group_footer' => [],
+        ]);
+
+        /* Assert */
+        $this->assertStringContainsString(
+            mb_trim((string) \Modules\Core\ReportBuilder\Bricks\FooterNotesBrick::toPreviewHtml($config)),
+            $preview,
+        );
+    }
+
+    #[Test]
+    public function preview_isolates_a_throwing_brick_like_print_does(): void
+    {
+        /* Arrange */
+        \Illuminate\Support\Facades\Log::shouldReceive('warning')->atLeast()->once();
+
+        $renderer = new class () extends ReportRenderer {
+            public function callPreviewBrick(string $brickClass, array $config): string
+            {
+                return $this->renderBrickSafely($brickClass, $config, [], preview: true);
+            }
+        };
+
+        $throwing = new class () {
+            public static function getId(): string
+            {
+                return 'boom_brick';
+            }
+
+            public static function toPreviewHtml(array $config): string
+            {
+                throw new RuntimeException('kaboom');
+            }
+        };
+
+        /* Act */
+        $out = $renderer->callPreviewBrick($throwing::class, []);
+
+        /* Assert */
+        $this->assertSame('<!-- report brick boom_brick failed to render -->', $out);
     }
 
     protected function template(array $bands, array $manifest = []): array
