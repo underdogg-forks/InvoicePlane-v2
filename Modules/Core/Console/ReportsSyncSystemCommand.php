@@ -32,10 +32,13 @@ class ReportsSyncSystemCommand extends Command
         $synced = 0;
 
         foreach (File::allFiles($source) as $file) {
-            $disk->put(
-                ReportTemplateStorage::SCOPE_SYSTEM . '/' . str_replace('\\', '/', $file->getRelativePathname()),
-                $file->getContents(),
-            );
+            $target = ReportTemplateStorage::SCOPE_SYSTEM . '/' . str_replace('\\', '/', $file->getRelativePathname());
+
+            if ($disk->put($target, $file->getContents()) === false) {
+                $this->error("Failed to write [{$target}] — system template storage may be incomplete.");
+
+                return self::FAILURE;
+            }
 
             $synced++;
         }

@@ -23,16 +23,6 @@ class Browsershot extends PDFAbstract
         return $this->getEngine($html)->pdf();
     }
 
-    public function download($html, $filename)
-    {
-        $response = response($this->getOutput($html));
-
-        $response->header('Content-Type', 'application/pdf');
-        $response->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
-
-        return $response->send();
-    }
-
     public function getEngine($html): BrowsershotEngine
     {
         $engine = BrowsershotEngine::html($html)

@@ -4,7 +4,9 @@ namespace Modules\Core\Services;
 
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Storage;
 use Modules\Core\Enums\ReportTemplateType;
+use Modules\Core\Jobs\GenerateDocumentPdfJob;
 use Modules\Core\Support\PDF\PDFFactory;
 use Modules\Invoices\Models\Invoice;
 use Modules\Quotes\Models\Quote;
@@ -45,11 +47,15 @@ class PdfGenerationService
 
     public function invoicePdf(Invoice $invoice): string
     {
+        $this->guardRenderTime();
+
         return PDFFactory::create()->getOutput($this->renderInvoiceHtml($invoice));
     }
 
     public function quotePdf(Quote $quote): string
     {
+        $this->guardRenderTime();
+
         return PDFFactory::create()->getOutput($this->renderQuoteHtml($quote));
     }
 
@@ -65,6 +71,64 @@ class PdfGenerationService
         return response($this->quotePdf($quote))
             ->header('Content-Type', 'application/pdf')
             ->header('Content-Disposition', 'attachment; filename="' . $this->filename('quote', (string) ($quote->quote_number ?: $quote->id)) . '"');
+    }
+
+    /**
+     * Entry point for the "Download PDF" table actions.
+     *
+     * Default: render inline and return the streamed response. When
+     * config('ip.report.queue') is on: return a fresh stored copy if one
+     * exists, otherwise dispatch a render job and return null so the caller
+     * can tell the user it is being prepared.
+     */
+    public function handleInvoiceDownload(Invoice $invoice): ?Response
+    {
+        if ( ! config('ip.report.queue')) {
+            return $this->downloadInvoice($invoice);
+        }
+
+        $path = $this->storedPathFor('invoice', $invoice);
+
+        if ($this->storedPdfIsFresh($path, $invoice)) {
+            return $this->streamStored($path, $this->filename('invoice', (string) ($invoice->invoice_number ?: $invoice->id)));
+        }
+
+        GenerateDocumentPdfJob::dispatch($invoice);
+
+        return null;
+    }
+
+    public function handleQuoteDownload(Quote $quote): ?Response
+    {
+        if ( ! config('ip.report.queue')) {
+            return $this->downloadQuote($quote);
+        }
+
+        $path = $this->storedPathFor('quote', $quote);
+
+        if ($this->storedPdfIsFresh($path, $quote)) {
+            return $this->streamStored($path, $this->filename('quote', (string) ($quote->quote_number ?: $quote->id)));
+        }
+
+        GenerateDocumentPdfJob::dispatch($quote);
+
+        return null;
+    }
+
+    public function storeInvoicePdf(Invoice $invoice): string
+    {
+        $path = $this->storedPathFor('invoice', $invoice);
+        Storage::disk('report_pdfs')->put($path, $this->invoicePdf($invoice));
+
+        return $path;
+    }
+
+    public function storeQuotePdf(Quote $quote): string
+    {
+        $path = $this->storedPathFor('quote', $quote);
+        Storage::disk('report_pdfs')->put($path, $this->quotePdf($quote));
+
+        return $path;
     }
 
     /**
@@ -87,6 +151,13 @@ class PdfGenerationService
         throw new RuntimeException(
             "No report template found for {$type->value} documents. Run \"php artisan reports:sync-system\".",
         );
+    }
+
+    public function filename(string $prefix, string $number): string
+    {
+        $number = preg_replace('/[^A-Za-z0-9\-_]/', '-', $number) ?: 'document';
+
+        return $prefix . '-' . $number . '.pdf';
     }
 
     protected function loadBySlug(string $slug, ReportTemplateType $type): ?array
@@ -119,18 +190,18 @@ class PdfGenerationService
             return null;
         }
 
-        $base = resource_path("report-templates/{$type->value}/{$slug}");
+        $base         = resource_path("report-templates/{$type->value}/{$slug}");
         $manifestPath = $base . '/manifest.json';
-        $bandsPath = $base . '/bands.json';
+        $bandsPath    = $base . '/bands.json';
 
-        if (! File::exists($manifestPath)) {
+        if ( ! File::exists($manifestPath)) {
             return null;
         }
 
         try {
             $manifest = json_decode((string) File::get($manifestPath), true, 64, JSON_THROW_ON_ERROR);
 
-            if (! is_array($manifest)) {
+            if ( ! is_array($manifest)) {
                 return null;
             }
 
@@ -151,10 +222,39 @@ class PdfGenerationService
         }
     }
 
-    public function filename(string $prefix, string $number): string
+    protected function storedPathFor(string $prefix, Invoice|Quote $document): string
     {
-        $number = preg_replace('/[^A-Za-z0-9\-_]/', '-', $number) ?: 'document';
+        $number = $document instanceof Invoice
+            ? (string) ($document->invoice_number ?: $document->id)
+            : (string) ($document->quote_number ?: $document->id);
 
-        return $prefix . '-' . $number . '.pdf';
+        return ((int) $document->company_id) . '/' . $this->filename($prefix, $number);
+    }
+
+    protected function storedPdfIsFresh(string $path, Invoice|Quote $document): bool
+    {
+        $disk = Storage::disk('report_pdfs');
+
+        if ( ! $disk->exists($path)) {
+            return false;
+        }
+
+        return $disk->lastModified($path) >= ($document->updated_at?->timestamp ?? 0);
+    }
+
+    protected function streamStored(string $path, string $filename): Response
+    {
+        return response((string) Storage::disk('report_pdfs')->get($path))
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+    }
+
+    protected function guardRenderTime(): void
+    {
+        $limit = (int) config('ip.report.render_time_limit', 120);
+
+        if ($limit > 0 && function_exists('set_time_limit')) {
+            @set_time_limit($limit);
+        }
     }
 }

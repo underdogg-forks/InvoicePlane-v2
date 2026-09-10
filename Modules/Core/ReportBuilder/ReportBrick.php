@@ -87,10 +87,48 @@ abstract class ReportBrick extends Brick
     }
 
     /**
-     * Filter a persisted config array down to the keys this brick declares.
+     * Filter a persisted config array down to the keys this brick declares,
+     * then coerce the well-known presentational values to safe shapes.
      */
     public static function filterConfig(array $config): array
     {
-        return array_intersect_key($config, array_flip(static::configKeys()));
+        return static::coerceConfigValues(
+            array_intersect_key($config, array_flip(static::configKeys())),
+        );
+    }
+
+    /**
+     * The Filament configure form validates numeric/enum fields client-side
+     * only. A crafted Livewire payload or a hand-edited template JSON can
+     * still put arbitrary strings on keys that end up inside a style=""
+     * attribute, so the presentational keys are coerced (or dropped) here —
+     * on every save and every render.
+     *
+     * @param array<string, mixed> $config
+     *
+     * @return array<string, mixed>
+     */
+    protected static function coerceConfigValues(array $config): array
+    {
+        foreach ($config as $key => $value) {
+            if ($key === 'font_size' || str_ends_with((string) $key, '_font_size')) {
+                $config[$key] = max(4, min(96, (int) $value));
+            }
+        }
+
+        $enums = [
+            'text_align'            => ['left', 'center', 'right', 'justify'],
+            'font_weight'           => ['normal', 'bold', 'bolder', 'lighter'],
+            'font_style'            => ['normal', 'italic'],
+            'description_placement' => ['inline_column', 'below_row', 'hidden'],
+        ];
+
+        foreach ($enums as $key => $allowed) {
+            if (array_key_exists($key, $config) && ! in_array($config[$key], $allowed, true)) {
+                unset($config[$key]);
+            }
+        }
+
+        return $config;
     }
 }

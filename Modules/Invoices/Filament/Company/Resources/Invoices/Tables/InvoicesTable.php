@@ -192,7 +192,15 @@ class InvoicesTable
                         ->visible(fn () => auth()->user()?->can(Permission::DOWNLOAD_INVOICES->value))
                         ->label(trans('ip.download_pdf'))
                         ->action(function (Invoice $record) {
-                            return app(\Modules\Core\Services\PdfGenerationService::class)->downloadInvoice($record);
+                            $response = app(\Modules\Core\Services\PdfGenerationService::class)->handleInvoiceDownload($record);
+
+                            if ($response === null) {
+                                Notification::make()->title(trans('ip.report_pdf_queued'))->success()->send();
+
+                                return;
+                            }
+
+                            return $response;
                         }),
                     EmailInvoiceAction::make()
                         ->visible(fn () => auth()->user()?->can(Permission::EMAIL_INVOICES->value))

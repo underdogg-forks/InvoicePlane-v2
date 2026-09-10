@@ -15,10 +15,10 @@
     @if(!empty($config[$contentField]))
         @if($wrapped)
             <div style="border-top: 1px solid #e5e7eb; padding-top: 10px; margin-top: 20px;">
-                {!! \Stevebauman\Purify\Facades\Purify::clean($config[$contentField]) !!}
+                {!! \Stevebauman\Purify\Facades\Purify::config('report')->clean($config[$contentField]) !!}
             </div>
         @else
-            {!! \Stevebauman\Purify\Facades\Purify::clean($config[$contentField]) !!}
+            {!! \Stevebauman\Purify\Facades\Purify::config('report')->clean($config[$contentField]) !!}
         @endif
     @elseif(!empty($data[$dataKey]))
         @if($wrapped)

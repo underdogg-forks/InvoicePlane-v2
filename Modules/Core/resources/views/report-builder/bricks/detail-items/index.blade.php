@@ -74,6 +74,9 @@
                     </tr>
                 @endif
             @endforeach
+            @if($data['items_truncated'] ?? false)
+                <tr><td colspan="99" style="font-size: 8pt; color: #6b7280; text-align: center; padding: 4px;">{{ trans('ip.report_rows_truncated') }}</td></tr>
+            @endif
         </tbody>
     </table>
 </div>

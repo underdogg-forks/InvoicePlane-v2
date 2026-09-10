@@ -50,6 +50,9 @@ class ReportDataMapper
 
         $paid = (float) $invoice->payments->sum('payment_amount');
 
+        $maxRows   = $this->maxRows();
+        $truncated = $invoice->invoiceItems->count() > $maxRows || $invoice->expenses->count() > $maxRows;
+
         return [
             'company' => $this->companyData($invoice->company),
             'client'  => $this->clientData($invoice->customer),
@@ -60,13 +63,14 @@ class ReportDataMapper
                 'po_number' => '',
                 'status'    => $invoice->invoice_status?->value ?? '',
             ],
-            'items'         => $invoice->invoiceItems->map(fn ($item): array => $this->itemData($item))->all(),
-            'invoice_items' => $invoice->invoiceItems->map(fn ($item): array => $this->productItemData($item))->all(),
-            'expense_items' => $invoice->expenses->map(fn ($expense): array => $this->expenseItemData($expense))->all(),
-            'project'       => $this->projectData($invoice->invoiceItems, $invoice->customer),
-            'tasks'         => $this->tasksData($invoice->invoiceItems, $invoice->customer),
-            'project_items' => $this->projectItemsData($invoice->invoiceItems, $invoice->customer),
-            'totals'        => [
+            'items'           => $this->cap($invoice->invoiceItems->map(fn ($item): array => $this->itemData($item))->all()),
+            'invoice_items'   => $this->cap($invoice->invoiceItems->map(fn ($item): array => $this->productItemData($item))->all()),
+            'expense_items'   => $this->cap($invoice->expenses->map(fn ($expense): array => $this->expenseItemData($expense))->all()),
+            'items_truncated' => $truncated,
+            'project'         => $this->projectData($invoice->invoiceItems, $invoice->customer),
+            'tasks'           => $this->cap($this->tasksData($invoice->invoiceItems, $invoice->customer)),
+            'project_items'   => $this->cap($this->projectItemsData($invoice->invoiceItems, $invoice->customer)),
+            'totals'          => [
                 'subtotal' => $this->money($invoice->invoice_item_subtotal),
                 'tax'      => $this->money($invoice->invoice_tax_total),
                 'total'    => $this->money($invoice->invoice_total),
@@ -103,12 +107,13 @@ class ReportDataMapper
                 'quote_expires_at' => $quote->quote_expires_at?->format('Y-m-d') ?? '',
                 'quote_status'     => $quote->quote_status?->value ?? '',
             ],
-            'items'         => $quote->quoteItems->map(fn ($item): array => $this->itemData($item))->all(),
-            'quote_items'   => $quote->quoteItems->map(fn ($item): array => $this->productItemData($item))->all(),
-            'project'       => $this->projectData($quote->quoteItems, $quote->prospect),
-            'tasks'         => $this->tasksData($quote->quoteItems, $quote->prospect),
-            'project_items' => $this->projectItemsData($quote->quoteItems, $quote->prospect),
-            'totals'        => [
+            'items'           => $this->cap($quote->quoteItems->map(fn ($item): array => $this->itemData($item))->all()),
+            'quote_items'     => $this->cap($quote->quoteItems->map(fn ($item): array => $this->productItemData($item))->all()),
+            'items_truncated' => $quote->quoteItems->count() > $this->maxRows(),
+            'project'         => $this->projectData($quote->quoteItems, $quote->prospect),
+            'tasks'           => $this->cap($this->tasksData($quote->quoteItems, $quote->prospect)),
+            'project_items'   => $this->cap($this->projectItemsData($quote->quoteItems, $quote->prospect)),
+            'totals'          => [
                 'subtotal' => $this->money($quote->quote_item_subtotal),
                 'tax'      => $this->money($quote->quote_tax_total),
                 'total'    => $this->money($quote->quote_total),
@@ -270,7 +275,7 @@ class ReportDataMapper
             $totals['total_due'] += $due;
         }
 
-        return ['aging_items' => $items, 'aging_totals' => $this->formatAgingTotals($totals)];
+        return ['aging_items' => $this->cap($items), 'aging_totals' => $this->formatAgingTotals($totals)];
     }
 
     protected function formatAgingTotals(array $totals): array
@@ -335,6 +340,23 @@ class ReportDataMapper
     protected function money(mixed $amount): string
     {
         return number_format((float) $amount, 2, '.', '');
+    }
+
+    /**
+     * Cap a rows array so one document cannot force an unbounded render.
+     *
+     * @param array<int, mixed> $rows
+     *
+     * @return array<int, mixed>
+     */
+    protected function cap(array $rows): array
+    {
+        return array_slice($rows, 0, $this->maxRows());
+    }
+
+    protected function maxRows(): int
+    {
+        return max(1, (int) config('ip.report.max_rows', 2000));
     }
 
     /**

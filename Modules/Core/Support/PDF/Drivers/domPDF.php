@@ -21,16 +21,6 @@ class domPDF extends PDFAbstract
         return $pdf->output();
     }
 
-    public function download($html, $filename)
-    {
-        $response = response($this->getOutput($html));
-
-        $response->header('Content-Type', 'application/pdf');
-        $response->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
-
-        return $response->send();
-    }
-
     private function getPdf($html)
     {
         $workDir = storage_path('app/dompdf');

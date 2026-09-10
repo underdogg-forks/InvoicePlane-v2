@@ -160,19 +160,28 @@ class ReportTemplateStorage
         $base = $this->path($scope, $slug, $type);
         $disk = Storage::disk(self::DISK);
 
-        $manifestPath    = $base . '/manifest.json';
-        $manifestWritten = $disk->put($manifestPath, $this->encodeJson($this->sanitizeManifest($manifest)));
+        $manifestJson = $this->encodeJson($this->sanitizeManifest($manifest));
+        $bandsJson    = $this->encodeJson($this->sanitizeBands($bands, $type));
 
-        if (! $manifestWritten) {
+        $maxBytes = max(1, (int) config('ip.report.max_template_bytes', 262144));
+
+        if (mb_strlen($manifestJson) + mb_strlen($bandsJson) > $maxBytes) {
+            throw new RuntimeException("Report template [{$scope}/{$slug}] exceeds the maximum size of {$maxBytes} bytes.");
+        }
+
+        $manifestPath    = $base . '/manifest.json';
+        $manifestWritten = $disk->put($manifestPath, $manifestJson);
+
+        if ( ! $manifestWritten) {
             Log::warning("Failed to write report template manifest to disk at [{$manifestPath}].");
 
             throw new RuntimeException("Failed to write report template [{$scope}/{$slug}] to disk.");
         }
 
         $bandsPath    = $base . '/bands.json';
-        $bandsWritten = $disk->put($bandsPath, $this->encodeJson($this->sanitizeBands($bands, $type)));
+        $bandsWritten = $disk->put($bandsPath, $bandsJson);
 
-        if (! $bandsWritten) {
+        if ( ! $bandsWritten) {
             Log::warning("Failed to write report template bands to disk at [{$bandsPath}].");
 
             throw new RuntimeException("Failed to write report template [{$scope}/{$slug}] to disk.");
@@ -284,7 +293,7 @@ class ReportTemplateStorage
             $this->encodeJson($manifest),
         );
 
-        if (! $written) {
+        if ( ! $written) {
             Log::warning("Failed to write report template manifest to disk at [{$path}].");
 
             throw new RuntimeException("Failed to write report template [{$scope}/{$slug}] to disk.");
@@ -319,7 +328,8 @@ class ReportTemplateStorage
      */
     public function sanitizeBands(array $bands, ?ReportTemplateType $type = null): array
     {
-        $sanitized = [];
+        $sanitized  = [];
+        $maxPerBand = max(1, (int) config('ip.report.max_bricks_per_band', 50));
 
         foreach (ReportBand::ordered() as $band) {
             $sanitized[$band->value] = [];
@@ -354,6 +364,8 @@ class ReportTemplateStorage
                     'config' => $brickClass::filterConfig($config),
                 ];
             }
+
+            $sanitized[$band->value] = array_slice($sanitized[$band->value], 0, $maxPerBand);
         }
 
         return $sanitized;

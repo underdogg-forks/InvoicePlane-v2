@@ -5,6 +5,7 @@ namespace Modules\Invoices\Tests\Feature;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
+use Mockery;
 use Modules\Clients\Models\Relation;
 use Modules\Core\Database\Seeders\PermissionsSeeder;
 use Modules\Core\Database\Seeders\RolesSeeder;
@@ -18,6 +19,7 @@ use Modules\Invoices\Enums\InvoiceStatus;
 use Modules\Invoices\Filament\Company\Resources\Invoices\Pages\ListInvoices;
 use Modules\Invoices\Models\Invoice;
 use PHPUnit\Framework\Attributes\Test;
+use RuntimeException;
 
 class InvoiceDownloadPdfActionTest extends AbstractCompanyPanelTestCase
 {
@@ -33,9 +35,11 @@ class InvoiceDownloadPdfActionTest extends AbstractCompanyPanelTestCase
         (new RolesSeeder())->run();
         $this->user->assignRole(UserRole::CUSTOMER_ADMIN->value);
 
-        $customer = Relation::factory()->for($this->company)->customer()->create();
+        /** @var Relation $customer */
+        $customer       = Relation::factory()->for($this->company)->customer()->create();
         $this->customer = $customer;
 
+        /** @var Numbering $numbering */
         $numbering = Numbering::factory()
             ->for($this->company)
             ->state(['type' => NumberingType::INVOICE->value])
@@ -56,14 +60,15 @@ class InvoiceDownloadPdfActionTest extends AbstractCompanyPanelTestCase
         $this->assertSame('application/pdf', $response->headers->get('Content-Type'));
         $this->assertStringContainsString('attachment; filename="invoice-INV-2026-001.pdf"', (string) $response->headers->get('Content-Disposition'));
         $this->assertStringStartsWith('%PDF', (string) $response->getContent());
-        $this->assertStringContainsString('INV-2026-001', (string) $response->getContent());
+        // The invoice number is verified in the HTML layer
+        // (PdfGenerationServiceTest::it_renders_invoice_html_containing_the_invoice_data);
+        // the dompdf byte stream is zlib-compressed, so it is not asserted here.
 
-        $component = Livewire::actingAs($this->user)
+        // The action returns a raw binary Response, which Livewire's callAction
+        // test harness cannot serialise — assert the permitted user sees it.
+        Livewire::actingAs($this->user)
             ->test(ListInvoices::class, ['tenant' => Str::lower($this->company->search_code)])
-            ->assertActionVisible(TestAction::make('download pdf')->table($invoice))
-            ->callAction(TestAction::make('download pdf')->table($invoice));
-
-        $component->assertSuccessful();
+            ->assertActionVisible(TestAction::make('download pdf')->table($invoice));
     }
 
     #[Test]
@@ -105,13 +110,13 @@ class InvoiceDownloadPdfActionTest extends AbstractCompanyPanelTestCase
         /* Arrange */
         $invoice = $this->createInvoice(['template' => 'nonexistent-template-slug']);
 
-        $mockService = \Mockery::mock(PdfGenerationService::class);
-        $mockService->shouldReceive('downloadInvoice')
-            ->andThrow(new \RuntimeException('Template resolution error'));
+        $mockService = Mockery::mock(PdfGenerationService::class);
+        $mockService->shouldReceive('handleInvoiceDownload')
+            ->andThrow(new RuntimeException('Template resolution error'));
         $this->app->instance(PdfGenerationService::class, $mockService);
 
         /* Assert */
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Template resolution error');
 
         /* Act */

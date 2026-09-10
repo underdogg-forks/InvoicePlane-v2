@@ -8,6 +8,7 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use InvalidArgumentException;
@@ -85,7 +86,15 @@ class QuotesTable
                         ->visible(fn () => auth()->user()?->can(Permission::DOWNLOAD_QUOTES->value))
                         ->label(trans('ip.download_pdf'))
                         ->action(function (Quote $record) {
-                            return app(\Modules\Core\Services\PdfGenerationService::class)->downloadQuote($record);
+                            $response = app(\Modules\Core\Services\PdfGenerationService::class)->handleQuoteDownload($record);
+
+                            if ($response === null) {
+                                Notification::make()->title(trans('ip.report_pdf_queued'))->success()->send();
+
+                                return;
+                            }
+
+                            return $response;
                         }),
                     EmailQuoteAction::make()
                         ->visible(fn () => auth()->user()?->can(Permission::EMAIL_QUOTES->value))

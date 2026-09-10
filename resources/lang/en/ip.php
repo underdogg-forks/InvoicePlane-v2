@@ -355,6 +355,8 @@ return [
     'remove'                                       => 'Remove',
     'remove_logo'                                  => 'Remove Logo',
     'report_options'                               => 'Report Options',
+    'report_pdf_queued'                            => 'The PDF is being prepared and will be available shortly.',
+    'report_rows_truncated'                        => 'Some rows were not shown because this document exceeds the display limit.',
     'reports'                                      => 'Reports',
     'reset'                                        => 'Reset',
     'reset_password'                               => 'Reset password',
