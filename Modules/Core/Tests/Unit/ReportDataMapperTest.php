@@ -289,6 +289,81 @@ class ReportDataMapperTest extends AbstractCompanyPanelTestCase
         $this->assertSame('500.00', $data['project_items'][0]['total']);
     }
 
+    /**
+     * RB-11 / S3-7 (#764) — no project/task brick in the template ⇒ neither
+     * the project/task eager-load nor the project data build runs.
+     */
+    #[Test]
+    public function it_skips_the_project_relation_load_when_no_project_brick_is_present(): void
+    {
+        /* Arrange */
+        $relation = Relation::factory()->for($this->company)->create(['company_name' => 'Proj Skip Client']);
+        $project  = Project::factory()->for($this->company)->create(['customer_id' => $relation->id, 'project_name' => 'Should Not Load']);
+        Task::factory()->for($this->company)->create(['customer_id' => $relation->id, 'project_id' => $project->id]);
+        $invoice = Invoice::factory()->for($this->company)->create(['customer_id' => $relation->id]);
+
+        \Illuminate\Support\Facades\DB::enableQueryLog();
+
+        /* Act */
+        $data = $this->mapper->forInvoice($invoice->fresh(), ['header_company', 'detail_items', 'footer_totals']);
+
+        $projectQueries = collect(\Illuminate\Support\Facades\DB::getQueryLog())
+            ->filter(fn (array $q): bool => str_contains($q['query'], '"projects"') || str_contains($q['query'], '"tasks"')
+                || str_contains($q['query'], '`projects`') || str_contains($q['query'], '`tasks`'))
+            ->count();
+
+        /* Assert */
+        $this->assertSame(0, $projectQueries, 'no project/task query should run without a project brick');
+        $this->assertSame('', $data['project']['project_number']);
+        $this->assertSame([], $data['tasks']);
+        $this->assertSame([], $data['project_items']);
+    }
+
+    /**
+     * RB-11 / S3-7 (#764) — a project brick in the template pulls the data
+     * back in.
+     */
+    #[Test]
+    public function it_loads_project_data_when_a_project_brick_is_present(): void
+    {
+        /* Arrange */
+        $relation = Relation::factory()->for($this->company)->create(['company_name' => 'Proj Load Client']);
+        Project::factory()->for($this->company)->create(['customer_id' => $relation->id, 'project_name' => 'Loaded', 'project_number' => 'PRJ-9']);
+        $invoice = Invoice::factory()->for($this->company)->create(['customer_id' => $relation->id]);
+
+        /* Act */
+        $data = $this->mapper->forInvoice($invoice->fresh(), ['header_project']);
+
+        /* Assert */
+        $this->assertSame('PRJ-9', $data['project']['project_number']);
+    }
+
+    /**
+     * RB-11 / S3-7 (#764) — no expense brick ⇒ no expense eager-load, empty
+     * expense_items.
+     */
+    #[Test]
+    public function it_skips_the_expense_relation_load_when_no_expense_brick_is_present(): void
+    {
+        /* Arrange */
+        $relation = Relation::factory()->for($this->company)->create(['company_name' => 'Exp Skip Client']);
+        $invoice  = Invoice::factory()->for($this->company)->create(['customer_id' => $relation->id]);
+        Expense::factory()->for($this->company)->create(['customer_id' => $relation->id, 'invoice_id' => $invoice->id]);
+
+        \Illuminate\Support\Facades\DB::enableQueryLog();
+
+        /* Act */
+        $data = $this->mapper->forInvoice($invoice->fresh(), ['header_company', 'detail_items']);
+
+        $expenseQueries = collect(\Illuminate\Support\Facades\DB::getQueryLog())
+            ->filter(fn (array $q): bool => str_contains($q['query'], '"expenses"') || str_contains($q['query'], '`expenses`'))
+            ->count();
+
+        /* Assert */
+        $this->assertSame(0, $expenseQueries, 'no expense query should run without an expense brick');
+        $this->assertSame([], $data['expense_items']);
+    }
+
     #[Test]
     public function it_populates_project_and_tasks_from_customer_when_not_billed_on_invoice(): void
     {

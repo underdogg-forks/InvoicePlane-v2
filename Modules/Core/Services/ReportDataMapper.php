@@ -32,30 +32,50 @@ class ReportDataMapper
     ];
 
     /**
+     * Bricks that read the customer's project/task tree. If none are in the
+     * template, the whole project/task eager-load and data build is skipped.
+     */
+    private const PROJECT_BRICKS = [
+        'detail_invoice_project',
+        'detail_quote_project',
+        'detail_tasks',
+        'header_project',
+    ];
+
+    /**
      * @param list<string> $brickIds bricks in the resolved template; an empty
      *                               list means "unknown — build everything"
      */
     public function forInvoice(Invoice $invoice, array $brickIds = []): array
     {
-        $invoice->loadMissing([
+        $wantsProject  = $this->wantsProject($brickIds);
+        $wantsExpenses = $this->wantsExpenses($brickIds);
+
+        $relations = [
             'company.addresses',
             'company.communications',
             'customer.addresses',
             'customer.communications',
-            'customer.projects.tasks',
-            'customer.tasks',
             'invoiceItems.product.productCategory',
             'invoiceItems.taxRate',
-            'invoiceItems.task.project',
             'payments',
-            'expenses.expenseCategory',
-            'expenses.vendor',
-        ]);
+        ];
+
+        if ($wantsProject) {
+            array_push($relations, 'customer.projects.tasks', 'customer.tasks', 'invoiceItems.task.project');
+        }
+
+        if ($wantsExpenses) {
+            array_push($relations, 'expenses.expenseCategory', 'expenses.vendor');
+        }
+
+        $invoice->loadMissing($relations);
 
         $paid = (float) $invoice->payments->sum('payment_amount');
 
         $maxRows   = $this->maxRows();
-        $truncated = $invoice->invoiceItems->count() > $maxRows || $invoice->expenses->count() > $maxRows;
+        $truncated = $invoice->invoiceItems->count() > $maxRows
+            || ($wantsExpenses && $invoice->expenses->count() > $maxRows);
 
         return [
             'company' => $this->companyData($invoice->company),
@@ -67,13 +87,15 @@ class ReportDataMapper
                 'po_number' => '',
                 'status'    => $invoice->invoice_status?->value ?? '',
             ],
-            'items'           => $this->cap($invoice->invoiceItems->map(fn ($item): array => $this->itemData($item))->all()),
-            'invoice_items'   => $this->cap($invoice->invoiceItems->map(fn ($item): array => $this->productItemData($item))->all()),
-            'expense_items'   => $this->cap($invoice->expenses->map(fn ($expense): array => $this->expenseItemData($expense))->all()),
+            'items'         => $this->cap($invoice->invoiceItems->map(fn ($item): array => $this->itemData($item))->all()),
+            'invoice_items' => $this->cap($invoice->invoiceItems->map(fn ($item): array => $this->productItemData($item))->all()),
+            'expense_items' => $wantsExpenses
+                ? $this->cap($invoice->expenses->map(fn ($expense): array => $this->expenseItemData($expense))->all())
+                : [],
             'items_truncated' => $truncated,
-            'project'         => $this->projectData($invoice->invoiceItems, $invoice->customer),
-            'tasks'           => $this->cap($this->tasksData($invoice->invoiceItems, $invoice->customer)),
-            'project_items'   => $this->cap($this->projectItemsData($invoice->invoiceItems, $invoice->customer)),
+            'project'         => $wantsProject ? $this->projectData($invoice->invoiceItems, $invoice->customer) : $this->emptyProject(),
+            'tasks'           => $wantsProject ? $this->cap($this->tasksData($invoice->invoiceItems, $invoice->customer)) : [],
+            'project_items'   => $wantsProject ? $this->cap($this->projectItemsData($invoice->invoiceItems, $invoice->customer)) : [],
             'totals'          => [
                 'subtotal' => $this->money($invoice->invoice_item_subtotal),
                 'tax'      => $this->money($invoice->invoice_tax_total),
@@ -96,17 +118,22 @@ class ReportDataMapper
      */
     public function forQuote(Quote $quote, array $brickIds = []): array
     {
-        $quote->loadMissing([
+        $wantsProject = $this->wantsProject($brickIds);
+
+        $relations = [
             'company.addresses',
             'company.communications',
             'prospect.addresses',
             'prospect.communications',
-            'prospect.projects.tasks',
-            'prospect.tasks',
             'quoteItems.product.productCategory',
             'quoteItems.taxRate',
-            'quoteItems.task.project',
-        ]);
+        ];
+
+        if ($wantsProject) {
+            array_push($relations, 'prospect.projects.tasks', 'prospect.tasks', 'quoteItems.task.project');
+        }
+
+        $quote->loadMissing($relations);
 
         return [
             'company' => $this->companyData($quote->company),
@@ -120,9 +147,9 @@ class ReportDataMapper
             'items'           => $this->cap($quote->quoteItems->map(fn ($item): array => $this->itemData($item))->all()),
             'quote_items'     => $this->cap($quote->quoteItems->map(fn ($item): array => $this->productItemData($item))->all()),
             'items_truncated' => $quote->quoteItems->count() > $this->maxRows(),
-            'project'         => $this->projectData($quote->quoteItems, $quote->prospect),
-            'tasks'           => $this->cap($this->tasksData($quote->quoteItems, $quote->prospect)),
-            'project_items'   => $this->cap($this->projectItemsData($quote->quoteItems, $quote->prospect)),
+            'project'         => $wantsProject ? $this->projectData($quote->quoteItems, $quote->prospect) : $this->emptyProject(),
+            'tasks'           => $wantsProject ? $this->cap($this->tasksData($quote->quoteItems, $quote->prospect)) : [],
+            'project_items'   => $wantsProject ? $this->cap($this->projectItemsData($quote->quoteItems, $quote->prospect)) : [],
             'totals'          => [
                 'subtotal' => $this->money($quote->quote_item_subtotal),
                 'tax'      => $this->money($quote->quote_tax_total),
@@ -142,6 +169,36 @@ class ReportDataMapper
     protected function wantsAging(array $brickIds): bool
     {
         return $brickIds === [] || in_array('detail_customer_aging', $brickIds, true);
+    }
+
+    /**
+     * @param list<string> $brickIds
+     */
+    protected function wantsProject(array $brickIds): bool
+    {
+        return $brickIds === [] || array_intersect($brickIds, self::PROJECT_BRICKS) !== [];
+    }
+
+    /**
+     * @param list<string> $brickIds
+     */
+    protected function wantsExpenses(array $brickIds): bool
+    {
+        return $brickIds === [] || in_array('detail_expense', $brickIds, true);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function emptyProject(): array
+    {
+        return [
+            'project_number' => '',
+            'project_name'   => '',
+            'start_at'       => '',
+            'end_at'         => '',
+            'project_status' => '',
+        ];
     }
 
     protected function companyData(?Company $company): array
@@ -388,13 +445,7 @@ class ReportDataMapper
             ?? collect($client?->projects)->first();
 
         if ($project === null) {
-            return [
-                'project_number' => '',
-                'project_name'   => '',
-                'start_at'       => '',
-                'end_at'         => '',
-                'project_status' => '',
-            ];
+            return $this->emptyProject();
         }
 
         return [
