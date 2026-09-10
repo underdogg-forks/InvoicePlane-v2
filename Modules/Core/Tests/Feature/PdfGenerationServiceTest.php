@@ -7,12 +7,16 @@ use Modules\Clients\Models\Relation;
 use Modules\Core\Services\PdfGenerationService;
 use Modules\Core\Services\ReportTemplateStorage;
 use Modules\Core\Tests\AbstractCompanyPanelTestCase;
+use Modules\Core\Tests\Concerns\AssertsRenderedPdf;
 use Modules\Invoices\Models\Invoice;
 use Modules\Invoices\Models\InvoiceItem;
 use PHPUnit\Framework\Attributes\Test;
+use RuntimeException;
 
 class PdfGenerationServiceTest extends AbstractCompanyPanelTestCase
 {
+    use AssertsRenderedPdf;
+
     protected PdfGenerationService $service;
 
     protected function setUp(): void
@@ -95,10 +99,8 @@ class PdfGenerationServiceTest extends AbstractCompanyPanelTestCase
         $quotePdf   = $this->service->quotePdf($this->goldenQuote());
 
         /* Assert */
-        $this->assertNotEmpty($invoicePdf);
-        $this->assertStringStartsWith('%PDF', $invoicePdf);
-        $this->assertNotEmpty($quotePdf);
-        $this->assertStringStartsWith('%PDF', $quotePdf);
+        $this->assertRenderedPdf($invoicePdf);
+        $this->assertRenderedPdf($quotePdf);
     }
 
     #[Test]
@@ -120,7 +122,7 @@ class PdfGenerationServiceTest extends AbstractCompanyPanelTestCase
         $invoice = $this->goldenInvoice();
 
         /* Assert */
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('No report template found for invoice documents.');
 
         /* Act */
@@ -142,25 +144,23 @@ class PdfGenerationServiceTest extends AbstractCompanyPanelTestCase
     }
 
     #[Test]
-    public function it_produces_non_empty_pdf_bytes_for_an_invoice(): void
+    public function it_produces_a_well_formed_pdf_for_an_invoice(): void
     {
         /* Act */
         $pdf = $this->service->invoicePdf($this->goldenInvoice());
 
         /* Assert */
-        $this->assertNotEmpty($pdf);
-        $this->assertStringStartsWith('%PDF', $pdf);
+        $this->assertRenderedPdf($pdf);
     }
 
     #[Test]
-    public function it_produces_non_empty_pdf_bytes_for_a_quote(): void
+    public function it_produces_a_well_formed_pdf_for_a_quote(): void
     {
         /* Act */
         $pdf = $this->service->quotePdf($this->goldenQuote());
 
         /* Assert */
-        $this->assertNotEmpty($pdf);
-        $this->assertStringStartsWith('%PDF', $pdf);
+        $this->assertRenderedPdf($pdf);
     }
 
     #[Test]

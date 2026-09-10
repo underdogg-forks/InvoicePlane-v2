@@ -22,6 +22,7 @@ use Modules\Core\Services\ReportDataMapper;
 use Modules\Core\Services\ReportRenderer;
 use Modules\Core\Services\ReportTemplateStorage;
 use Modules\Core\Tests\AbstractCompanyPanelTestCase;
+use Modules\Core\Tests\Concerns\AssertsRenderedPdf;
 use Modules\Expenses\Models\Expense;
 use Modules\Expenses\Models\ExpenseCategory;
 use Modules\Invoices\Models\Invoice;
@@ -34,6 +35,8 @@ use PHPUnit\Framework\Attributes\Test;
 
 class ReportBuilderVeteranChecklistTest extends AbstractCompanyPanelTestCase
 {
+    use AssertsRenderedPdf;
+
     protected ReportDataMapper $mapper;
 
     protected ReportTemplateStorage $storage;
@@ -96,8 +99,7 @@ class ReportBuilderVeteranChecklistTest extends AbstractCompanyPanelTestCase
         $this->assertStringContainsString($longClientName, $html);
         $this->assertStringContainsString($longDescription, $html);
         $this->assertStringContainsString('Paragraph of text note content.', $footerNotesHtml);
-        $this->assertNotEmpty($pdf);
-        $this->assertStringStartsWith('%PDF', $pdf);
+        $this->assertRenderedPdf($pdf);
     }
 
     #[Test]
@@ -124,8 +126,7 @@ class ReportBuilderVeteranChecklistTest extends AbstractCompanyPanelTestCase
         $pdf = $this->pdfService->invoicePdf($invoice->fresh());
 
         /* Assert */
-        $this->assertNotEmpty($pdf);
-        $this->assertStringStartsWith('%PDF', $pdf);
+        $this->assertRenderedPdf($pdf);
     }
 
     #[Test]
@@ -245,8 +246,7 @@ class ReportBuilderVeteranChecklistTest extends AbstractCompanyPanelTestCase
 
         /* Assert */
         $this->assertNotEmpty($html);
-        $this->assertNotEmpty($pdf);
-        $this->assertStringStartsWith('%PDF', $pdf);
+        $this->assertRenderedPdf($pdf);
     }
 
     /*
