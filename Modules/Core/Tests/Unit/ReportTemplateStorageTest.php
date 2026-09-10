@@ -2,8 +2,10 @@
 
 namespace Modules\Core\Tests\Unit;
 
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use Mockery;
 use Modules\Core\Enums\ReportTemplateType;
 use Modules\Core\Services\ReportTemplateStorage;
 use Modules\Core\Tests\AbstractTestCase;
@@ -144,6 +146,39 @@ class ReportTemplateStorageTest extends AbstractTestCase
             ['header', 'group_header', 'details', 'group_footer', 'footer'],
             array_keys($sanitized),
         );
+    }
+
+    #[Test]
+    public function it_logs_a_warning_when_a_template_json_file_is_corrupt(): void
+    {
+        /* Arrange */
+        Log::spy();
+        $this->storage->save(ReportTemplateStorage::SCOPE_COMPANY, 'broken', $this->manifest(['slug' => 'broken']), $this->bands());
+        Storage::disk(ReportTemplateStorage::DISK)->put('1/broken/bands.json', '{ not valid json');
+
+        /* Act */
+        $loaded = $this->storage->load(ReportTemplateStorage::SCOPE_COMPANY, 'broken');
+
+        /* Assert */
+        $this->assertSame([], $loaded['bands']['header'] ?? []);
+        Log::shouldHaveReceived('warning')->withArgs(
+            fn (string $message): bool => str_contains($message, 'Corrupt JSON')
+                && str_contains($message, '1/broken/bands.json'),
+        );
+    }
+
+    #[Test]
+    public function it_does_not_log_for_valid_template_json(): void
+    {
+        /* Arrange */
+        Log::spy();
+        $this->storage->save(ReportTemplateStorage::SCOPE_COMPANY, 'fine', $this->manifest(['slug' => 'fine']), $this->bands());
+
+        /* Act */
+        $this->storage->load(ReportTemplateStorage::SCOPE_COMPANY, 'fine');
+
+        /* Assert */
+        Log::shouldNotHaveReceived('warning');
     }
 
     #[Test]
@@ -305,7 +340,7 @@ class ReportTemplateStorageTest extends AbstractTestCase
     public function it_throws_runtime_exception_when_save_fails_to_write_manifest_or_bands(): void
     {
         /* Arrange */
-        $fakeDisk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $fakeDisk = Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
         $fakeDisk->shouldReceive('put')->andReturn(false);
         Storage::set(ReportTemplateStorage::DISK, $fakeDisk);
         \Illuminate\Support\Facades\Log::shouldReceive('warning')->atLeast()->once();
@@ -324,7 +359,7 @@ class ReportTemplateStorageTest extends AbstractTestCase
         /* Arrange */
         $this->storage->save(ReportTemplateStorage::SCOPE_COMPANY, 'test-template', $this->manifest(), $this->bands());
 
-        $fakeDisk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $fakeDisk = Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
         $fakeDisk->shouldReceive('exists')->andReturn(true);
         $fakeDisk->shouldReceive('get')->andReturn(json_encode($this->manifest()));
         $fakeDisk->shouldReceive('put')->andReturn(false);

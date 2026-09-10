@@ -449,7 +449,9 @@ class ReportTemplateStorage
 
         try {
             $decoded = json_decode((string) Storage::disk(self::DISK)->get($path), true, 64, JSON_THROW_ON_ERROR);
-        } catch (JsonException) {
+        } catch (JsonException $e) {
+            Log::warning("Corrupt JSON in report template at [{$path}]: " . $e->getMessage());
+
             return null;
         }
 
