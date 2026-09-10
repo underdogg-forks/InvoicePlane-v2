@@ -59,8 +59,16 @@ test.describe('Report Builder — save / preview smoke', () => {
     const firstRow = page.locator('table tbody tr').first();
     await expect(firstRow).toBeVisible({ timeout: 15000 });
 
-    /* Filament renders row actions behind a per-row trigger; open it. */
+    /*
+     * The row actions sit inside a Filament ActionGroup: every row's dropdown
+     * panel is pre-rendered into <body> and stays hidden until its trigger is
+     * clicked. Open the first row's trigger, then assert only against the
+     * items in the panel that is now visible — a page-wide getByText() matches
+     * every rendered row's copy of the item and trips strict mode.
+     */
     await firstRow.getByRole('button').last().click();
-    await expect(page.getByText(trans('download_pdf'))).toBeVisible({ timeout: 15000 });
+    await expect(
+      page.locator('.fi-dropdown-list-item-label:visible', { hasText: trans('download_pdf') }),
+    ).toHaveCount(1, { timeout: 15000 });
   });
 });
