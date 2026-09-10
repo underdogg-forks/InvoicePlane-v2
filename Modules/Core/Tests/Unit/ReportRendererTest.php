@@ -5,6 +5,7 @@ namespace Modules\Core\Tests\Unit;
 use Mockery;
 use Modules\Core\Services\ReportRenderer;
 use Modules\Core\Tests\AbstractTestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use RuntimeException;
 
@@ -17,6 +18,24 @@ class ReportRendererTest extends AbstractTestCase
         parent::setUp();
 
         $this->renderer = new ReportRenderer();
+    }
+
+    /**
+     * RB-08 (#761) — every branch of the group-subtotal fallback chain, not
+     * just the {price,tax,total} shape the grouped render tests happen to use.
+     *
+     * @return array<string, array{0: array<string, mixed>, 1: string}>
+     */
+    public static function groupSubtotalShapeProvider(): array
+    {
+        return [
+            'explicit subtotal'           => [['subtotal' => 40, 'total' => 44, 'tax' => 4], '40.00'],
+            'unit_price times quantity'   => [['unit_price' => 10, 'quantity' => 3], '30.00'],
+            'unit_price without quantity' => [['unit_price' => 10], '10.00'],
+            'price times quantity'        => [['price' => 7, 'quantity' => 4], '28.00'],
+            'amount only'                 => [['amount' => 15], '15.00'],
+            'total minus tax fallback'    => [['total' => 20, 'tax' => 5], '15.00'],
+        ];
     }
 
     #[Test]
@@ -386,6 +405,25 @@ class ReportRendererTest extends AbstractTestCase
 
         /* Assert */
         $this->assertSame('<!-- report brick boom_brick failed to render -->', $out);
+    }
+
+    #[Test]
+    #[DataProvider('groupSubtotalShapeProvider')]
+    public function it_computes_group_subtotals_for_each_item_shape(array $item, string $expectedSubtotal): void
+    {
+        /* Arrange */
+        $renderer = new class () extends ReportRenderer {
+            public function callGroupTotals(array $items): array
+            {
+                return $this->calculateGroupTotals($items);
+            }
+        };
+
+        /* Act */
+        $totals = $renderer->callGroupTotals([$item]);
+
+        /* Assert */
+        $this->assertSame($expectedSubtotal, $totals['subtotal']);
     }
 
     protected function template(array $bands, array $manifest = []): array
