@@ -145,6 +145,40 @@ class ReportDataMapperTest extends AbstractCompanyPanelTestCase
         $this->assertSame('250.00', $data['aging_totals']['days_60']);
     }
 
+    /**
+     * RB-11 / S3-9 (#764) — aging fires its own query per invoice; skip it
+     * unless the resolved template actually has the aging brick.
+     */
+    #[Test]
+    public function it_skips_the_aging_query_when_the_template_has_no_aging_brick(): void
+    {
+        /* Arrange */
+        $relation = Relation::factory()->for($this->company)->create(['company_name' => 'No Aging Client']);
+        $invoice  = Invoice::factory()->for($this->company)->create([
+            'customer_id'    => $relation->id,
+            'invoice_status' => 'overdue',
+            'invoice_due_at' => '2025-11-05',
+            'invoice_total'  => 250.0000,
+        ]);
+
+        \Illuminate\Support\Facades\DB::enableQueryLog();
+
+        /* Act */
+        $without      = $this->mapper->forInvoice($invoice->fresh(), ['header_company', 'detail_items']);
+        $agingQueries = collect(\Illuminate\Support\Facades\DB::getQueryLog())
+            ->filter(fn (array $q): bool => str_contains($q['query'], 'invoice_status') && str_contains($q['query'], 'in ('))
+            ->count();
+        \Illuminate\Support\Facades\DB::flushQueryLog();
+
+        $with = $this->mapper->forInvoice($invoice->fresh(), ['detail_customer_aging']);
+
+        /* Assert */
+        $this->assertSame([], $without['aging_items']);
+        $this->assertSame('0.00', $without['aging_totals']['total_due']);
+        $this->assertSame(0, $agingQueries, 'no open-invoice aging query should run without the aging brick');
+        $this->assertNotEmpty($with['aging_items'], 'aging is still computed when the brick is present');
+    }
+
     #[Test]
     public function it_excludes_paid_and_draft_invoices_from_aging(): void
     {

@@ -31,7 +31,11 @@ class ReportDataMapper
         InvoiceStatus::OVERDUE->value,
     ];
 
-    public function forInvoice(Invoice $invoice): array
+    /**
+     * @param list<string> $brickIds bricks in the resolved template; an empty
+     *                               list means "unknown — build everything"
+     */
+    public function forInvoice(Invoice $invoice, array $brickIds = []): array
     {
         $invoice->loadMissing([
             'company.addresses',
@@ -80,11 +84,17 @@ class ReportDataMapper
             'summary' => (string) $invoice->summary,
             'terms'   => (string) $invoice->terms,
             'footer'  => (string) $invoice->footer,
-            ...$this->agingData($invoice->customer),
+            // The aging report runs its own query per invoice; skip it unless
+            // the template actually has the aging brick.
+            ...$this->agingData($this->wantsAging($brickIds) ? $invoice->customer : null),
         ];
     }
 
-    public function forQuote(Quote $quote): array
+    /**
+     * @param list<string> $brickIds bricks in the resolved template; an empty
+     *                               list means "unknown — build everything"
+     */
+    public function forQuote(Quote $quote, array $brickIds = []): array
     {
         $quote->loadMissing([
             'company.addresses',
@@ -124,6 +134,14 @@ class ReportDataMapper
             'terms'   => (string) $quote->terms,
             'footer'  => (string) $quote->footer,
         ];
+    }
+
+    /**
+     * @param list<string> $brickIds
+     */
+    protected function wantsAging(array $brickIds): bool
+    {
+        return $brickIds === [] || in_array('detail_customer_aging', $brickIds, true);
     }
 
     protected function companyData(?Company $company): array

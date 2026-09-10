@@ -23,6 +23,9 @@ use Throwable;
  */
 class PdfGenerationService
 {
+    /** @var array<string, array{manifest: array, bands: array<string, array>}|null> */
+    private array $templateCache = [];
+
     public function __construct(
         protected ReportTemplateStorage $storage,
         protected ReportRenderer $renderer,
@@ -31,17 +34,21 @@ class PdfGenerationService
 
     public function renderInvoiceHtml(Invoice $invoice): string
     {
+        $template = $this->resolveTemplate($invoice);
+
         return $this->renderer->render(
-            $this->resolveTemplate($invoice),
-            $this->mapper->forInvoice($invoice),
+            $template,
+            $this->mapper->forInvoice($invoice, $this->brickIdsOf($template)),
         );
     }
 
     public function renderQuoteHtml(Quote $quote): string
     {
+        $template = $this->resolveTemplate($quote);
+
         return $this->renderer->render(
-            $this->resolveTemplate($quote),
-            $this->mapper->forQuote($quote),
+            $template,
+            $this->mapper->forQuote($quote, $this->brickIdsOf($template)),
         );
     }
 
@@ -166,7 +173,40 @@ class PdfGenerationService
         return $prefix . '-' . $number . '.pdf';
     }
 
+    /**
+     * @param array{manifest: array, bands: array<string, array>} $template
+     *
+     * @return list<string>
+     */
+    protected function brickIdsOf(array $template): array
+    {
+        $ids = [];
+
+        foreach ($template['bands'] as $entries) {
+            foreach ($entries as $entry) {
+                if (isset($entry['brick'])) {
+                    $ids[] = (string) $entry['brick'];
+                }
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
     protected function loadBySlug(string $slug, ReportTemplateType $type): ?array
+    {
+        // The same slug/type resolves to the same template for every document
+        // of a tenant in one request — don't re-read the JSON per document.
+        $key = ((string) session('current_company_id')) . "\0" . $slug . "\0" . $type->value;
+
+        if ( ! array_key_exists($key, $this->templateCache)) {
+            $this->templateCache[$key] = $this->resolveBySlug($slug, $type);
+        }
+
+        return $this->templateCache[$key];
+    }
+
+    protected function resolveBySlug(string $slug, ReportTemplateType $type): ?array
     {
         try {
             $template = $this->storage->load(ReportTemplateStorage::SCOPE_COMPANY, $slug);

@@ -163,6 +163,42 @@ class PdfGenerationServiceTest extends AbstractCompanyPanelTestCase
         $this->assertRenderedPdf($pdf);
     }
 
+    /**
+     * RB-11 / S3-8 (#764) — the same slug/type resolves once per request, not
+     * once per rendered document.
+     */
+    #[Test]
+    public function it_reads_a_template_from_storage_only_once_across_renders(): void
+    {
+        /* Arrange */
+        $countingStorage = new class () extends ReportTemplateStorage {
+            public int $loadCalls = 0;
+
+            public function load(string $scope, string $slug, ?\Modules\Core\Enums\ReportTemplateType $type = null): ?array
+            {
+                $this->loadCalls++;
+
+                return parent::load($scope, $slug, $type);
+            }
+        };
+        $service = new PdfGenerationService(
+            $countingStorage,
+            app(\Modules\Core\Services\ReportRenderer::class),
+            app(\Modules\Core\Services\ReportDataMapper::class),
+        );
+        $invoice = $this->goldenInvoice();
+
+        /* Act */
+        $service->invoicePdf($invoice);
+        $afterFirst = $countingStorage->loadCalls;
+        $service->invoicePdf($invoice);
+        $service->invoicePdf($invoice);
+
+        /* Assert — the extra renders resolve the template from cache, not disk */
+        $this->assertGreaterThan(0, $afterFirst);
+        $this->assertSame($afterFirst, $countingStorage->loadCalls);
+    }
+
     #[Test]
     public function it_matches_the_golden_html_snapshot_for_the_default_quote_template(): void
     {
