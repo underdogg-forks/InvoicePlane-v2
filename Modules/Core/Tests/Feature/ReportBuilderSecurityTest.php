@@ -4,6 +4,7 @@ namespace Modules\Core\Tests\Feature;
 
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Mockery;
 use Modules\Clients\Models\Relation;
 use Modules\Core\Enums\ReportTemplateType;
 use Modules\Core\Jobs\GenerateDocumentPdfJob;
@@ -250,6 +251,25 @@ class ReportBuilderSecurityTest extends AbstractCompanyPanelTestCase
         $files = Storage::disk('report_pdfs')->allFiles();
         $this->assertNotEmpty($files);
         $this->assertStringStartsWith('%PDF', Storage::disk('report_pdfs')->get($files[0]));
+    }
+
+    /**
+     * RB-03 (#755) — a failed write of the stored PDF must abort the job, not
+     * report success, or the queue path loops on an endless "being prepared".
+     */
+    #[Test]
+    public function m2_stored_pdf_write_failure_throws_instead_of_reporting_success(): void
+    {
+        /* Arrange */
+        config()->set('ip.report.queue', true);
+        $failing = Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $failing->shouldReceive('put')->andReturn(false);
+        Storage::set('report_pdfs', $failing);
+        $invoice = $this->makeInvoice();
+
+        /* Act & Assert */
+        $this->expectException(RuntimeException::class);
+        app(PdfGenerationService::class)->storeInvoicePdf($invoice);
     }
 
     protected function makeInvoice(int $items = 1): Invoice

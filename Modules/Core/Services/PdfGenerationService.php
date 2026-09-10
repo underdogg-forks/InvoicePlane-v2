@@ -118,7 +118,10 @@ class PdfGenerationService
     public function storeInvoicePdf(Invoice $invoice): string
     {
         $path = $this->storedPathFor('invoice', $invoice);
-        Storage::disk('report_pdfs')->put($path, $this->invoicePdf($invoice));
+
+        if (Storage::disk('report_pdfs')->put($path, $this->invoicePdf($invoice)) === false) {
+            throw new RuntimeException("Failed to write stored PDF to [{$path}].");
+        }
 
         return $path;
     }
@@ -126,7 +129,10 @@ class PdfGenerationService
     public function storeQuotePdf(Quote $quote): string
     {
         $path = $this->storedPathFor('quote', $quote);
-        Storage::disk('report_pdfs')->put($path, $this->quotePdf($quote));
+
+        if (Storage::disk('report_pdfs')->put($path, $this->quotePdf($quote)) === false) {
+            throw new RuntimeException("Failed to write stored PDF to [{$path}].");
+        }
 
         return $path;
     }
