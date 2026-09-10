@@ -2,6 +2,7 @@
 
 namespace Modules\Core\Tests\Feature;
 
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Mockery;
@@ -270,6 +271,57 @@ class ReportBuilderSecurityTest extends AbstractCompanyPanelTestCase
         /* Act & Assert */
         $this->expectException(RuntimeException::class);
         app(PdfGenerationService::class)->storeInvoicePdf($invoice);
+    }
+
+    /**
+     * RB-02 (#756) — a failed render leaves a log line instead of vanishing
+     * silently into failed_jobs with the user still told "being prepared".
+     */
+    #[Test]
+    public function m2_queue_job_logs_an_error_when_it_fails(): void
+    {
+        /* Arrange */
+        Log::spy();
+        $invoice = $this->makeInvoice();
+        $job     = new GenerateDocumentPdfJob($invoice);
+
+        /* Act */
+        $job->failed(new RuntimeException('render blew up'));
+
+        /* Assert */
+        Log::shouldHaveReceived('error')->withArgs(
+            fn (string $message, array $context): bool => str_contains($message, 'GenerateDocumentPdfJob')
+                && $context['id'] === $invoice->getKey()
+                && $context['error'] === 'render blew up',
+        );
+    }
+
+    /**
+     * RB-02 (#756) — repeat Download clicks on the same document collapse to a
+     * single render job; distinct documents still queue independently.
+     */
+    #[Test]
+    public function m2_queue_deduplicates_jobs_per_document(): void
+    {
+        /* Arrange */
+        Queue::fake();
+        config()->set('ip.report.queue', true);
+        Storage::fake('report_pdfs');
+        $service  = app(PdfGenerationService::class);
+        $invoiceA = $this->makeInvoice();
+        $invoiceB = $this->makeInvoice();
+
+        /* Act */
+        $service->handleInvoiceDownload($invoiceA);
+        $service->handleInvoiceDownload($invoiceA);
+        $service->handleInvoiceDownload($invoiceB);
+
+        /* Assert */
+        Queue::assertPushed(
+            GenerateDocumentPdfJob::class,
+            fn (GenerateDocumentPdfJob $job): bool => $job->document->is($invoiceA),
+        );
+        Queue::assertPushed(GenerateDocumentPdfJob::class, 2);
     }
 
     protected function makeInvoice(int $items = 1): Invoice
