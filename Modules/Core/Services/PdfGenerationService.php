@@ -297,6 +297,13 @@ class PdfGenerationService
 
     protected function guardRenderTime(): void
     {
+        // set_time_limit() resets PHP's execution-time counter and installs a
+        // ceiling for the rest of the process. Inside the single-process test
+        // run that arms a time bomb for every test that follows a render.
+        if (app()->runningUnitTests()) {
+            return;
+        }
+
         $limit = (int) config('ip.report.render_time_limit', 120);
 
         if ($limit > 0 && function_exists('set_time_limit')) {
