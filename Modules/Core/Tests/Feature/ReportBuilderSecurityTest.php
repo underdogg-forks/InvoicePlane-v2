@@ -2,6 +2,7 @@
 
 namespace Modules\Core\Tests\Feature;
 
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -20,6 +21,7 @@ use Modules\Core\Support\PDF\PDFInterface;
 use Modules\Core\Tests\AbstractCompanyPanelTestCase;
 use Modules\Invoices\Models\Invoice;
 use Modules\Invoices\Models\InvoiceItem;
+use Modules\Quotes\Models\Quote;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use ReflectionClass;
@@ -263,7 +265,7 @@ class ReportBuilderSecurityTest extends AbstractCompanyPanelTestCase
     {
         /* Arrange */
         config()->set('ip.report.queue', true);
-        $failing = Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $failing = Mockery::mock(Filesystem::class);
         $failing->shouldReceive('put')->andReturn(false);
         Storage::set('report_pdfs', $failing);
         $invoice = $this->makeInvoice();
@@ -322,6 +324,81 @@ class ReportBuilderSecurityTest extends AbstractCompanyPanelTestCase
             fn (GenerateDocumentPdfJob $job): bool => $job->document->is($invoiceA),
         );
         Queue::assertPushed(GenerateDocumentPdfJob::class, 2);
+    }
+
+    /**
+     * RB-04 (#757) — queue on, a fresh stored copy present: the handler streams
+     * it back and queues nothing.
+     */
+    #[Test]
+    public function m2_queue_serves_a_fresh_stored_pdf_without_re_rendering(): void
+    {
+        /* Arrange */
+        Queue::fake();
+        config()->set('ip.report.queue', true);
+        $invoice = $this->makeInvoice();
+        $disk    = Mockery::mock(Filesystem::class);
+        $disk->shouldReceive('exists')->andReturn(true);
+        $disk->shouldReceive('lastModified')->andReturn(($invoice->updated_at?->timestamp ?? 0) + 10);
+        $disk->shouldReceive('get')->andReturn('%PDF-cached-copy');
+        Storage::set('report_pdfs', $disk);
+
+        /* Act */
+        $response = app(PdfGenerationService::class)->handleInvoiceDownload($invoice);
+
+        /* Assert */
+        $this->assertInstanceOf(SymfonyResponse::class, $response);
+        $this->assertSame('%PDF-cached-copy', (string) $response->getContent());
+        Queue::assertNothingPushed();
+    }
+
+    /**
+     * RB-04 (#757) — queue on, the stored copy is older than the document: it
+     * is not served; a fresh render is queued instead.
+     */
+    #[Test]
+    public function m2_queue_re_renders_when_the_stored_pdf_is_stale(): void
+    {
+        /* Arrange */
+        Queue::fake();
+        config()->set('ip.report.queue', true);
+        $invoice = $this->makeInvoice();
+        $disk    = Mockery::mock(Filesystem::class);
+        $disk->shouldReceive('exists')->andReturn(true);
+        $disk->shouldReceive('lastModified')->andReturn(($invoice->updated_at?->timestamp ?? 0) - 10);
+        Storage::set('report_pdfs', $disk);
+
+        /* Act */
+        $response = app(PdfGenerationService::class)->handleInvoiceDownload($invoice);
+
+        /* Assert */
+        $this->assertNull($response);
+        Queue::assertPushed(GenerateDocumentPdfJob::class);
+    }
+
+    /**
+     * RB-04 (#757) — the fresh-stored-copy path works the same for quotes.
+     */
+    #[Test]
+    public function m2_queue_serves_a_fresh_stored_quote_pdf(): void
+    {
+        /* Arrange */
+        Queue::fake();
+        config()->set('ip.report.queue', true);
+        $quote = Quote::factory()->for($this->company)->create(['quote_number' => 'Q-SEC-' . uniqid()]);
+        $disk  = Mockery::mock(Filesystem::class);
+        $disk->shouldReceive('exists')->andReturn(true);
+        $disk->shouldReceive('lastModified')->andReturn(($quote->updated_at?->timestamp ?? 0) + 10);
+        $disk->shouldReceive('get')->andReturn('%PDF-cached-quote');
+        Storage::set('report_pdfs', $disk);
+
+        /* Act */
+        $response = app(PdfGenerationService::class)->handleQuoteDownload($quote);
+
+        /* Assert */
+        $this->assertInstanceOf(SymfonyResponse::class, $response);
+        $this->assertSame('%PDF-cached-quote', (string) $response->getContent());
+        Queue::assertNothingPushed();
     }
 
     protected function makeInvoice(int $items = 1): Invoice
