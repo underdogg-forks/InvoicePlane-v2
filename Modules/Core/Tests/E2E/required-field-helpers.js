@@ -6,13 +6,20 @@
  * the backend knows a column is required — and that exact fact (NOT NULL,
  * no default) is already the ground truth
  * Modules/Core/Commands/ExportFormDbSchemaCommand.php exports (the same
- * source `FormDbConstraintAuditTest.php` uses). Instead of matching PHPUnit
- * test names to E2E test titles (fuzzy, and "a title that matches still
- * isn't a test that works"), each generated test here fills in a fully
- * valid form except one required field, submits for real, and asserts the
- * browser genuinely rejects it — mirroring exactly what the PHPUnit test
- * proves, through the real UI, driven by the same schema fact on both
- * sides.
+ * source `FormDbConstraintAuditTest.php` uses). Each generated test fills in
+ * a fully valid create form except one required field, submits for real, and
+ * asserts the browser genuinely rejects it — mirroring what the PHPUnit test
+ * proves, through the real UI.
+ *
+ * Which fields get a test is an EXPLICIT choice per spec, not schema
+ * iteration: `registerRequiredFieldOmissionTests(module, { 'panel/slug':
+ * ['field', ...] })`. A required column that a user never types —
+ * tenant-injected (company_id), auth-derived (user_id), service-computed
+ * (invoice_total), relation-derived (customer_id), or a repeater/rich-text/
+ * file-upload — is left off the list with a one-line comment in the spec.
+ * The schema export is still loaded, purely as a stale-entry guard (a listed
+ * field that's no longer NOT-NULL, or a resource key that no longer resolves,
+ * fails loudly).
  *
  * Two distinct rejection mechanisms exist in this app, confirmed by
  * inspecting real live DOM/network traffic (not assumed):
@@ -31,18 +38,29 @@
  *    inside that field's `.fi-fo-field` wrapper. Assert that element is
  *    visible with non-empty text.
  *
- * Fields this can't handle (repeaters like invoice/quote line items, rich
- * text, file uploads) are skipped with a reason — they're not scalar DB
- * columns the schema export describes anyway, so this never claims to
- * cover them. That's a real, separate gap left for hand-written E2E tests,
- * not silently pretended away.
+ * A required DB column with no user-fillable form field behind it (repeaters,
+ * rich text, file uploads, plus relation-derived / service-computed /
+ * tenant-injected columns like customer_id, invoice_total, company_id) is
+ * `test.skip()`-ed with an annotation, not failed: whether such a column
+ * needs a matching ->required() rule is the backend FormDbConstraintAuditTest's
+ * call — it's form-field-driven and can answer it; this DB-column-driven
+ * browser check cannot, and only claims the fields a user actually fills.
  */
 
 import { execSync } from 'child_process';
 import { test, expect } from './test.js';
 import { tenantPath } from './tenant-path.js';
 
-const NON_FORM_COLUMNS = new Set(['id', 'created_at', 'updated_at', 'deleted_at']);
+// Columns the framework fills, never a user-typed form input:
+// - id / timestamps: Eloquent/DB managed.
+// - company_id: injected by the BelongsToCompany trait from the Filament
+//   tenant on create (see CLAUDE.md) — no resource renders it as a field.
+//   FormDbConstraintAuditTest (the backend half) never flags it either
+//   because that audit is form-field-driven and there's no field to check;
+//   this generator is DB-column-driven, so it has to exclude it explicitly
+//   or every company-panel resource produces an undeclared-skip failure for
+//   a column no form was ever meant to expose.
+const NON_FORM_COLUMNS = new Set(['id', 'created_at', 'updated_at', 'deleted_at', 'company_id']);
 
 /**
  * Runs `php artisan mind-the-gap:export-schema` and returns only the
@@ -62,7 +80,16 @@ const NON_FORM_COLUMNS = new Set(['id', 'created_at', 'updated_at', 'deleted_at'
  * ivpldock-workspace-1 container to exec into, so `php artisan` is invoked
  * directly there instead.
  */
-export function loadSchemaForModule(moduleName) {
+// The export command takes no module argument — it always dumps every
+// panel's every resource, and callers filter afterwards. Eight spec files
+// call this at collection time; without memoisation that's eight Laravel
+// boots (or `docker exec`s) producing byte-identical JSON before the first
+// assertion, multiplied again per Playwright worker. Parse once per process.
+let _schemaCache;
+
+function loadFullSchema() {
+  if (_schemaCache) return _schemaCache;
+
   const raw = process.env.CI
     ? execSync('php artisan mind-the-gap:export-schema', { encoding: 'utf8' })
     : (() => {
@@ -75,7 +102,13 @@ export function loadSchemaForModule(moduleName) {
         );
       })();
 
-  const schema = JSON.parse(raw);
+  _schemaCache = JSON.parse(raw);
+
+  return _schemaCache;
+}
+
+export function loadSchemaForModule(moduleName) {
+  const schema = loadFullSchema();
   const prefix = `Modules\\${moduleName}\\`;
 
   return {
@@ -188,12 +221,14 @@ async function extractFieldMeta(scope) {
       let name = null;
       let kind = null;
       let required = false;
+      let readOnly = false;
 
       if (nativeCtl) {
         name = nativeRawKey.replace(/\[\]$/, '');
         const tag = nativeCtl.tagName;
         const type = (nativeCtl.getAttribute('type') || '').toLowerCase();
         required = nativeCtl.required || nativeCtl.getAttribute('aria-required') === 'true';
+        readOnly = nativeCtl.readOnly || nativeCtl.getAttribute('aria-readonly') === 'true';
 
         if (tag === 'SELECT') kind = 'native-select';
         else if (tag === 'TEXTAREA') kind = 'textarea';
@@ -218,7 +253,7 @@ async function extractFieldMeta(scope) {
       // fi-select's real DOM id (e.g. "mountedActionSchema0.relation_type")
       // is kept verbatim so later lookups target the actual element instead
       // of re-deriving a "form.<name>" id that's wrong for modal actions.
-      out.push({ name, kind, required, id: fiSelectBtn ? fiSelectBtn.id : null });
+      out.push({ name, kind, required, readOnly, id: fiSelectBtn ? fiSelectBtn.id : null });
     }
 
     return out;
@@ -246,7 +281,10 @@ function nativeControlLocator(scope, name) {
  * whole test rather than fill it wrong and produce a false result.
  */
 async function fillValidValue(scope, page, field) {
-  const ctl = nativeControlLocator(scope, field.name);
+  // .first(): nativeControlLocator returns an id/name-suffix match that can
+  // resolve to >1 node — .evaluate() and the .fill()/.check() actions below
+  // are strict and would throw on a multi-match.
+  const ctl = nativeControlLocator(scope, field.name).first();
 
   // A required, readOnly field (e.g. RelationForm's unique_name) is driven
   // by another field's ->afterStateUpdated()/->afterStateHydrated() hook,
@@ -290,7 +328,13 @@ async function fillValidValue(scope, page, field) {
       const btn = scope.locator(`[id="${field.id}"]`);
       await btn.click();
       const controlsId = await btn.getAttribute('aria-controls');
-      const listbox = page.locator(`#${controlsId}`);
+      if (!controlsId) {
+        throw new Error(`fi-select '${field.name}' opened no listbox (no aria-controls on the combobox)`);
+      }
+      // [id="..."], not `#${controlsId}` — Filament's generated ids carry
+      // dots/colons that a bare CSS id selector misparses (same reason the
+      // button above is matched with [id=...]).
+      const listbox = page.locator(`[id="${controlsId}"]`);
       const firstOption = listbox.getByRole('option').first();
       await firstOption.waitFor({ state: 'visible', timeout: 5000 });
       await firstOption.click();
@@ -302,7 +346,25 @@ async function fillValidValue(scope, page, field) {
 }
 
 async function clickSubmit(scope) {
-  await scope.locator('button[type="submit"]').filter({ hasText: /Create|Save/i }).first().click();
+  // Filament renders the create/save button differently by context: a real
+  // type="submit" on a dedicated create PAGE, but a plain <button wire:click>
+  // inside some header-action MODALS (e.g. "Add Team Member", Numbering) —
+  // where the type="submit" selector matches nothing and .click() would hang
+  // the whole 30s test timeout. Try both shapes with a short bounded wait,
+  // and throw a classifiable error if neither is there so the caller can
+  // record it as a harness gap rather than a failure.
+  const candidates = [
+    scope.getByRole('button', { name: /^(create|save)$/i }),
+    scope.locator('button[type="submit"]').filter({ hasText: /create|save/i }),
+  ];
+  for (const c of candidates) {
+    const btn = c.last();
+    if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await btn.click();
+      return;
+    }
+  }
+  throw new Error('SUBMIT_NOT_FOUND: no create/save button located in the form scope');
 }
 
 /**
@@ -333,7 +395,31 @@ async function assertOmissionRejected(scope, page, field) {
   // for this exact class of field (commit fc25764).
   await clickSubmit(scope);
   await page.waitForTimeout(500);
-  const ctl = nativeControlLocator(scope, field.name);
+
+  // Negative signal first: checkValidity() === false is near-tautological for
+  // an empty `required` input — true whether or not a submit was attempted or
+  // blocked. If a Filament success notification appeared, the create went
+  // through regardless of the constraint DOM, so the omission was NOT
+  // rejected. (Covers a resource whose submit control isn't a real
+  // type=submit, so the browser never blocks — see clickSubmit's comment.)
+  const succeeded = await page
+    .locator('.fi-no-notification')
+    .filter({ has: page.locator('.fi-color-success, [class*="success"]') })
+    .first()
+    .isVisible({ timeout: 1000 })
+    .catch(() => false);
+  if (succeeded) {
+    return { rejected: false, mechanism: 'native-constraint-validation', detail: 'create succeeded despite the omitted field' };
+  }
+
+  const ctl = nativeControlLocator(scope, field.name).first();
+  // If the control can't be resolved after submit (form re-rendered under a
+  // different id, replaced by a modal, etc.) a bare .evaluate() would hang
+  // the whole 30s test timeout — bound it and let the caller record a
+  // harness gap instead.
+  if (!(await ctl.isVisible({ timeout: 3000 }).catch(() => false))) {
+    throw new Error(`HARNESS_CANNOT_ASSERT: native control for '${field.name}' not resolvable after submit`);
+  }
   const isValid = await ctl.evaluate((el) => el.checkValidity());
   const validationMessage = await ctl.evaluate((el) => el.validationMessage);
   return { rejected: isValid === false && validationMessage !== '', mechanism: 'native-constraint-validation', detail: validationMessage };
@@ -347,7 +433,7 @@ async function assertOmissionRejected(scope, page, field) {
 export async function testRequiredFieldOmission(page, resource, targetFieldName) {
   const scope = await openCreateForm(page, resource);
   if (!scope) {
-    return { skipped: 'no create form (button or link) found for this resource' };
+    return { skipped: 'no create form (button or link) found for this resource', reason: 'no-create-form' };
   }
 
   const allFields = await extractFieldMeta(scope);
@@ -355,7 +441,17 @@ export async function testRequiredFieldOmission(page, resource, targetFieldName)
   const target = requiredFields.find((f) => f.name === targetFieldName);
 
   if (!target) {
-    return { skipped: `'${targetFieldName}' was not found as a required rendered field (repeater/rich-text/file-upload, or not required in the DOM — a real mismatch mind-the-gap's own audit should already have caught)` };
+    return {
+      skipped: `'${targetFieldName}' is not rendered as a fillable required field — it's relation-derived, service-computed, tenant-injected, or a repeater/rich-text/file-upload. Whether a NOT-NULL column needs a matching ->required() form rule is FormDbConstraintAuditTest's job (form-field-driven, authoritative); this browser-level check only speaks to fields a user actually fills in.`,
+      reason: 'field-not-rendered',
+    };
+  }
+
+  if (target.readOnly) {
+    return {
+      skipped: `'${targetFieldName}' is a read-only field driven by another field's afterStateUpdated hook (e.g. slug derived from name) — a user can't type in it or leave it blank, so a browser-level "omit it" test doesn't apply. FormDbConstraintAuditTest already exempts disabled/non-user-editable fields the same way.`,
+      reason: 'field-not-rendered',
+    };
   }
 
   for (const field of requiredFields) {
@@ -363,54 +459,106 @@ export async function testRequiredFieldOmission(page, resource, targetFieldName)
     try {
       await fillValidValue(scope, page, field);
     } catch (error) {
-      return { skipped: `could not fill sibling required field '${field.name}' with a valid value: ${error.message}` };
+      return {
+        skipped: `could not fill sibling required field '${field.name}' with a valid value: ${error.message}`,
+        reason: 'unfillable-sibling',
+      };
     }
   }
 
-  return assertOmissionRejected(scope, page, target);
+  try {
+    return await assertOmissionRejected(scope, page, target);
+  } catch (error) {
+    // assertOmissionRejected throws only when this generic driver can't
+    // operate the form — the submit control isn't locatable, or the field's
+    // control isn't resolvable after submit. That's a gap in the driver, not
+    // an app defect: record it as a skip rather than redden the suite over
+    // test tooling.
+    if (String(error.message).startsWith('SUBMIT_NOT_FOUND') || String(error.message).startsWith('HARNESS_CANNOT_ASSERT')) {
+      return {
+        skipped: `couldn't locate this form's submit control to test the omission (${error.message})`,
+        reason: 'harness-cannot-drive',
+      };
+    }
+    throw error;
+  }
 }
 
 /**
- * Registers one `mind-the-gap-again` test per required column of every
- * resource in `moduleName`, via `testRequiredFieldOmission` above.
+ * Registers `mind-the-gap-again` tests from an EXPLICIT per-resource field
+ * list — one `test()` per field named, nothing auto-discovered:
  *
- * A `result.skipped` outcome (no create form, target field not rendered as
- * required, or an unfillable sibling field) used to `return` straight out
- * of the test — which Playwright reports as a PASS, with only an
- * annotation attached. That let a real form/DB mismatch (exactly the bug
- * class this suite exists to catch) hide behind a green checkmark.
+ *   registerRequiredFieldOmissionTests('Payments', {
+ *     'company/payments': ['invoice_id'],
+ *   });
  *
- * Now only a skip whose gap is explicitly declared in
- * FormDbGapKnownExceptions::KNOWN_GAPS (the same registry
- * FormDbConstraintAuditTest.php uses) is allowed to skip; every other skip
- * reason fails the test, the same "record it or it's a bug" discipline
- * FormDbConstraintAuditTest.php already applies on the backend.
+ * `fieldsByResource` maps `'<panel>/<slug>'` → the user-facing required
+ * fields whose omission the browser must reject. Whoever writes the spec
+ * decides what belongs — a column that's framework-filled (company_id,
+ * user_id), service-computed (invoice_total), relation-derived (customer_id),
+ * or otherwise not a thing a user types is simply left off the list, with a
+ * one-line comment in the spec saying why. No skips, no KNOWN_GAPS lookup:
+ * every entry is a real assertion, and every omission is deliberate and
+ * visible in the spec file rather than inferred here.
+ *
+ * The schema export is still loaded — as a stale-entry guard: a listed field
+ * that is no longer a NOT-NULL / no-default column (or a resource key that no
+ * longer resolves) fails loudly so the list can't rot.
  */
-export function registerRequiredFieldOmissionTests(moduleName) {
-  const schema = loadSchemaForModule(moduleName);
+export function registerRequiredFieldOmissionTests(moduleName, fieldsByResource) {
+  let schema;
+  try {
+    schema = loadSchemaForModule(moduleName);
+  } catch (error) {
+    // loadSchemaForModule runs at collection time (execSync + JSON.parse).
+    // A failure here — DB down, dev container missing, malformed output —
+    // must not throw out of this call: these tests share a spec file with
+    // the rest of the module's E2E tests, and a collection-time throw takes
+    // the whole file's discovery down with it. Register one explicit failing
+    // test instead, so the schema problem is loud but contained.
+    test(`mind-the-gap-again: ${moduleName} — schema export unavailable`, () => {
+      throw new Error(
+        `Could not load the form/DB schema for ${moduleName} via `
+        + `'php artisan mind-the-gap:export-schema' (see loadSchemaForModule): `
+        + error.message
+      );
+    });
 
-  for (const resource of schema.resources) {
-    const fields = requiredColumns(resource);
-    if (fields.length === 0) continue;
+    return;
+  }
 
-    test.describe(`mind-the-gap-again: ${resource.panel}/${resource.slug}`, () => {
-      for (const column of fields) {
-        test(`omitting required '${column.name}' is rejected by the browser`, async ({ page }) => {
-          const result = await testRequiredFieldOmission(page, resource, column.name);
+  for (const [resourceKey, fieldNames] of Object.entries(fieldsByResource)) {
+    const resource = schema.resources.find((r) => `${r.panel}/${r.slug}` === resourceKey);
+
+    test.describe(`mind-the-gap-again: ${resourceKey}`, () => {
+      if (!resource) {
+        test(`resource '${resourceKey}' is still registered`, () => {
+          throw new Error(
+            `No Filament resource in module ${moduleName} matches '${resourceKey}' — `
+            + 'it was renamed, unregistered, or moved panels. Update this spec\'s field map.'
+          );
+        });
+
+        return;
+      }
+
+      const requiredCols = new Set(requiredColumns(resource).map((c) => c.name));
+
+      for (const fieldName of fieldNames) {
+        test(`omitting required '${fieldName}' is rejected by the browser`, async ({ page }) => {
+          expect(
+            requiredCols.has(fieldName),
+            `'${fieldName}' is listed for ${resourceKey} but is not a NOT-NULL/no-default column on `
+              + `'${resource.table}' — stale list entry: drop it, or fix the form/DB.`
+          ).toBe(true);
+
+          const result = await testRequiredFieldOmission(page, resource, fieldName);
 
           if (result.skipped) {
-            test.info().annotations.push({ type: 'skipped-reason', description: result.skipped });
-
-            const gapKey = `${resource.resourceClass}:${column.name}`;
-            if (Object.prototype.hasOwnProperty.call(schema.knownGaps, gapKey)) {
-              test.skip(true, result.skipped);
-              return;
-            }
-
             throw new Error(
-              `Undeclared skip for ${gapKey}: ${result.skipped}\n`
-              + 'If this is a deliberate, reviewed gap, register it in '
-              + "FormDbGapKnownExceptions::KNOWN_GAPS — don't leave it silently skipped."
+              `Couldn't run the omission test for '${fieldName}' on ${resourceKey}: ${result.skipped}\n`
+              + `It's in ${moduleName}'s explicit list — either teach the driver to handle this `
+              + 'field, or drop it from the list with a comment on why.'
             );
           }
 

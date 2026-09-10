@@ -103,6 +103,7 @@ class CoreServiceProvider extends ServiceProvider
             \Modules\Core\Commands\MakeUserCommand::class,
             \Modules\Core\Commands\GenerateObservers::class,
             \Modules\Core\Console\ReportsSyncSystemCommand::class,
+            \Modules\Core\Commands\ExportFormDbSchemaCommand::class,
         ]);
     }
 
