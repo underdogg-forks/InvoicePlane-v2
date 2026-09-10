@@ -59,6 +59,25 @@ class ReportBrickTest extends AbstractTestCase
         $this->assertSame(['show_vat_id' => true], $filtered);
     }
 
+    /**
+     * RB-09 (#762) — filterConfig() coerces presentational values, not just
+     * prunes unknown keys: a crafted font_size is clamped to an int and a
+     * non-enum text_align is dropped.
+     */
+    #[Test]
+    public function it_coerces_presentational_config_values(): void
+    {
+        /* Act */
+        $filtered = HeaderCompanyBrick::filterConfig([
+            'font_size'  => '999; url(x)',
+            'text_align' => 'left"><b>',
+        ]);
+
+        /* Assert */
+        $this->assertSame(96, $filtered['font_size']);
+        $this->assertArrayNotHasKey('text_align', $filtered);
+    }
+
     #[Test]
     public function it_has_no_config_keys_for_the_page_break_brick(): void
     {
