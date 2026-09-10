@@ -37,21 +37,6 @@ class CompanyUserResource extends Resource
     // query below scopes manually to the current tenant.
     protected static bool $isScopedToTenant = false;
 
-    /** The company this list and its actions are scoped to; null → fail closed. */
-    private static function currentCompany(): ?Company
-    {
-        return Filament::getTenant();
-    }
-
-    /** Single source of truth for who may see and manage the team roster. */
-    private static function userMayManageTeam(): bool
-    {
-        return auth()->user()?->hasRole([
-            ...UserRole::elevated(),
-            UserRole::CUSTOMER_ADMIN->value,
-        ]) ?? false;
-    }
-
     public static function form(Schema $schema): Schema
     {
         return $schema->schema([
@@ -149,5 +134,20 @@ class CompanyUserResource extends Resource
         $roles = array_merge(UserRole::elevated(), [UserRole::CUSTOMER_ADMIN->value]);
 
         return auth()->user()?->hasRole($roles) ?? false;
+    }
+
+    /** The company this list and its actions are scoped to; null → fail closed. */
+    private static function currentCompany(): ?Company
+    {
+        return Filament::getTenant();
+    }
+
+    /** Single source of truth for who may see and manage the team roster. */
+    private static function userMayManageTeam(): bool
+    {
+        return auth()->user()?->hasRole([
+            ...UserRole::elevated(),
+            UserRole::CUSTOMER_ADMIN->value,
+        ]) ?? false;
     }
 }
