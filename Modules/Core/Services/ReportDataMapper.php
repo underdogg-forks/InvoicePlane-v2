@@ -279,8 +279,8 @@ class ReportDataMapper
     }
 
     /**
-     * dompdf runs with remote fetching disabled, so the logo must resolve
-     * to a local file path.
+     * Logo is embedded as a base64 data URI so both dompdf and Browsershot
+     * can render it without requiring local file access in the browser.
      */
     protected function logoPath(Company $company): string
     {
@@ -297,7 +297,18 @@ class ReportDataMapper
 
             $path = $disk->path((string) $company->logo);
 
-            return is_file($path) ? $path : '';
+            if ( ! is_file($path)) {
+                return '';
+            }
+
+            $mimeType = mime_content_type($path) ?: 'image/png';
+            $contents = file_get_contents($path);
+
+            if ($contents === false) {
+                return '';
+            }
+
+            return 'data:' . $mimeType . ';base64,' . base64_encode($contents);
         } catch (Throwable) {
             return '';
         }

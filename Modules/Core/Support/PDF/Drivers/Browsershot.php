@@ -33,17 +33,11 @@ class Browsershot extends PDFAbstract
         return $response->send();
     }
 
-    protected function getEngine($html): BrowsershotEngine
+    public function getEngine($html): BrowsershotEngine
     {
         $engine = BrowsershotEngine::html($html)
             ->format($this->paperSize)
-            ->showBackground()
-            /*
-             * Report HTML is app-generated only (never user-authored) and
-             * references images by local path, which Chromium blocks from
-             * file:// pages unless file access is allowed.
-             */
-            ->addChromiumArguments(['allow-file-access-from-files']);
+            ->showBackground();
 
         if ($this->paperOrientation === 'landscape') {
             $engine->landscape();

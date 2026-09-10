@@ -2,10 +2,12 @@
 
 namespace Modules\Core\Services;
 
+use Illuminate\Support\Facades\Log;
 use Modules\Core\Enums\ReportBand;
 use Modules\Core\Enums\ReportBlockWidth;
 use Modules\Core\Enums\ReportGroupBy;
 use Modules\Core\ReportBuilder\ReportBricksCollection;
+use Throwable;
 
 /**
  * Renders a report template (manifest + bands) with entity data into the
@@ -49,16 +51,27 @@ class ReportRenderer
         $groupKey = $groupBy->value;
         $groups   = $this->extractGroupKeys($data, $groupKey);
 
-        foreach ($groups as $groupValue) {
-            $groupData = $this->buildGroupData($data, $groupKey, $groupValue);
-
-            $groupHtml = $this->renderBand(ReportBand::GROUP_HEADER, $template, $groupData)
-                . $this->renderBand(ReportBand::DETAILS, $template, $groupData)
-                . $this->renderBand(ReportBand::GROUP_FOOTER, $template, $groupData);
+        if ($groups === []) {
+            $groupHtml = $this->renderBand(ReportBand::GROUP_HEADER, $template, $data)
+                . $this->renderBand(ReportBand::DETAILS, $template, $data)
+                . $this->renderBand(ReportBand::GROUP_FOOTER, $template, $data);
 
             if ($groupHtml !== '') {
                 $style = $this->keepsGroupTogether($template['manifest'] ?? []) ? ' style="page-break-inside: avoid;"' : '';
                 $body .= '<div class="report-group"' . $style . '>' . $groupHtml . '</div>';
+            }
+        } else {
+            foreach ($groups as $groupValue) {
+                $groupData = $this->buildGroupData($data, $groupKey, $groupValue);
+
+                $groupHtml = $this->renderBand(ReportBand::GROUP_HEADER, $template, $groupData)
+                    . $this->renderBand(ReportBand::DETAILS, $template, $groupData)
+                    . $this->renderBand(ReportBand::GROUP_FOOTER, $template, $groupData);
+
+                if ($groupHtml !== '') {
+                    $style = $this->keepsGroupTogether($template['manifest'] ?? []) ? ' style="page-break-inside: avoid;"' : '';
+                    $body .= '<div class="report-group"' . $style . '>' . $groupHtml . '</div>';
+                }
             }
         }
 
@@ -228,7 +241,7 @@ class ReportRenderer
         foreach ($entries as $entry) {
             if (($entry['brick'] ?? null) === 'page_break') {
                 $html .= $this->renderRows($segment, $data);
-                $html .= (string) \Modules\Core\ReportBuilder\Bricks\PageBreakBrick::toHtml($entry['config'] ?? [], $data);
+                $html .= $this->renderBrickSafely(\Modules\Core\ReportBuilder\Bricks\PageBreakBrick::class, $entry['config'] ?? [], $data);
                 $segment = [];
 
                 continue;
@@ -299,9 +312,14 @@ class ReportRenderer
 
         foreach ($row as $block) {
             $brickClass = ReportBricksCollection::findById((string) $block['entry']['brick']);
-            $config     = is_array($block['entry']['config'] ?? null) ? $block['entry']['config'] : [];
-            $inner      = (string) $brickClass::toHtml($brickClass::filterConfig($config), $data);
-            $percent    = (int) round($block['width']->getGridWidth() / 12 * 100);
+
+            if ($brickClass === null) {
+                continue;
+            }
+
+            $config  = is_array($block['entry']['config'] ?? null) ? $block['entry']['config'] : [];
+            $inner   = $this->renderBrickSafely($brickClass, $config, $data);
+            $percent = (int) round($block['width']->getGridWidth() / 12 * 100);
 
             $cells .= '<td class="report-block" style="width: ' . $percent . '%; vertical-align: top; padding: 0;">'
                 . $inner
@@ -309,6 +327,24 @@ class ReportRenderer
         }
 
         return '<table class="report-row" style="width: 100%; border-collapse: collapse;"><tr>' . $cells . '</tr></table>';
+    }
+
+    /**
+     * @param class-string<\Modules\Core\ReportBuilder\ReportBrick>|string $brickClass
+     */
+    protected function renderBrickSafely(string $brickClass, array $config, array $data): string
+    {
+        $id = method_exists($brickClass, 'getId') ? $brickClass::getId() : $brickClass;
+
+        try {
+            $filteredConfig = method_exists($brickClass, 'filterConfig') ? $brickClass::filterConfig($config) : $config;
+
+            return (string) $brickClass::toHtml($filteredConfig, $data);
+        } catch (Throwable $e) {
+            Log::warning("Report brick {$id} failed: {$e->getMessage()}", ['exception' => $e]);
+
+            return "<!-- report brick {$id} failed to render -->";
+        }
     }
 
     protected function keepsTogether(ReportBand $band, array $manifest): bool

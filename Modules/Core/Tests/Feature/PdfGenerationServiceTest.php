@@ -85,6 +85,49 @@ class PdfGenerationServiceTest extends AbstractCompanyPanelTestCase
     }
 
     #[Test]
+    public function it_renders_invoice_and_quote_pdf_falling_back_to_resources_when_disk_is_empty(): void
+    {
+        /* Arrange */
+        Storage::fake(ReportTemplateStorage::DISK);
+
+        /* Act */
+        $invoicePdf = $this->service->invoicePdf($this->goldenInvoice());
+        $quotePdf   = $this->service->quotePdf($this->goldenQuote());
+
+        /* Assert */
+        $this->assertNotEmpty($invoicePdf);
+        $this->assertStringStartsWith('%PDF', $invoicePdf);
+        $this->assertNotEmpty($quotePdf);
+        $this->assertStringStartsWith('%PDF', $quotePdf);
+    }
+
+    #[Test]
+    public function it_throws_runtime_exception_when_template_cannot_be_found_anywhere(): void
+    {
+        /* Arrange */
+        Storage::fake(ReportTemplateStorage::DISK);
+        $service = new class (
+            new ReportTemplateStorage(),
+            app(\Modules\Core\Services\ReportRenderer::class),
+            app(\Modules\Core\Services\ReportDataMapper::class),
+        ) extends PdfGenerationService {
+            protected function loadFromResources(string $slug, \Modules\Core\Enums\ReportTemplateType $type): ?array
+            {
+                return null;
+            }
+        };
+
+        $invoice = $this->goldenInvoice();
+
+        /* Assert */
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('No report template found for invoice documents.');
+
+        /* Act */
+        $service->resolveTemplate($invoice);
+    }
+
+    #[Test]
     public function it_renders_invoice_html_containing_the_invoice_data(): void
     {
         /* Act */

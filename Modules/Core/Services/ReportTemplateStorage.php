@@ -4,6 +4,7 @@ namespace Modules\Core\Services;
 
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -159,8 +160,23 @@ class ReportTemplateStorage
         $base = $this->path($scope, $slug, $type);
         $disk = Storage::disk(self::DISK);
 
-        $disk->put($base . '/manifest.json', $this->encodeJson($this->sanitizeManifest($manifest)));
-        $disk->put($base . '/bands.json', $this->encodeJson($this->sanitizeBands($bands, $type)));
+        $manifestPath    = $base . '/manifest.json';
+        $manifestWritten = $disk->put($manifestPath, $this->encodeJson($this->sanitizeManifest($manifest)));
+
+        if (! $manifestWritten) {
+            Log::warning("Failed to write report template manifest to disk at [{$manifestPath}].");
+
+            throw new RuntimeException("Failed to write report template [{$scope}/{$slug}] to disk.");
+        }
+
+        $bandsPath    = $base . '/bands.json';
+        $bandsWritten = $disk->put($bandsPath, $this->encodeJson($this->sanitizeBands($bands, $type)));
+
+        if (! $bandsWritten) {
+            Log::warning("Failed to write report template bands to disk at [{$bandsPath}].");
+
+            throw new RuntimeException("Failed to write report template [{$scope}/{$slug}] to disk.");
+        }
     }
 
     /**
@@ -262,10 +278,17 @@ class ReportTemplateStorage
         $manifest         = $template['manifest'];
         $manifest['name'] = $newName;
 
-        Storage::disk(self::DISK)->put(
-            $this->path($scope, $slug, $type) . '/manifest.json',
+        $path    = $this->path($scope, $slug, $type) . '/manifest.json';
+        $written = Storage::disk(self::DISK)->put(
+            $path,
             $this->encodeJson($manifest),
         );
+
+        if (! $written) {
+            Log::warning("Failed to write report template manifest to disk at [{$path}].");
+
+            throw new RuntimeException("Failed to write report template [{$scope}/{$slug}] to disk.");
+        }
     }
 
     /**

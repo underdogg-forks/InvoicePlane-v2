@@ -21,6 +21,29 @@ class BrowsershotDriverTest extends AbstractTestCase
     }
 
     #[Test]
+    public function it_does_not_include_allow_file_access_from_files_argument(): void
+    {
+        /* Arrange */
+        $driver = new Browsershot();
+
+        /* Act */
+        $engine = $driver->getEngine('<h1>Test</h1>');
+
+        /* Assert */
+        $reflection = new \ReflectionClass($engine);
+        if ($reflection->hasProperty('additionalOptions')) {
+            $prop = $reflection->getProperty('additionalOptions');
+            $prop->setAccessible(true);
+            $options = $prop->getValue($engine) ?? [];
+            $args = $options['args'] ?? [];
+            $this->assertNotContains('allow-file-access-from-files', $args);
+            $this->assertNotContains('--allow-file-access-from-files', $args);
+        } else {
+            $this->assertTrue(true);
+        }
+    }
+
+    #[Test]
     public function it_produces_pdf_bytes_from_html_when_chromium_is_available(): void
     {
         /* Arrange — opt-in driver: skip on hosts without Node/Chromium */

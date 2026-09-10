@@ -85,14 +85,7 @@ class QuotesTable
                         ->visible(fn () => auth()->user()?->can(Permission::DOWNLOAD_QUOTES->value))
                         ->label(trans('ip.download_pdf'))
                         ->action(function (Quote $record) {
-                            $pdfService = app(\Modules\Core\Services\PdfGenerationService::class);
-
-                            return response()->streamDownload(
-                                function () use ($pdfService, $record): void {
-                                    echo $pdfService->quotePdf($record);
-                                },
-                                'quote-' . ($record->quote_number ?: $record->id) . '.pdf',
-                            );
+                            return app(\Modules\Core\Services\PdfGenerationService::class)->downloadQuote($record);
                         }),
                     EmailQuoteAction::make()
                         ->visible(fn () => auth()->user()?->can(Permission::EMAIL_QUOTES->value))

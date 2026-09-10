@@ -13,6 +13,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\HtmlString;
 use Modules\Core\Enums\ReportBand;
 use Modules\Core\Enums\ReportBlockWidth;
@@ -123,6 +124,10 @@ abstract class BaseReportBuilderPage extends Page implements HasForms
     {
         abort_unless($this->canSave(), 403);
 
+        if ($this->managesSystemScope()) {
+            abort_unless(static::canAccess(), 403);
+        }
+
         $state = $this->form->getState();
         $bands = [];
 
@@ -130,15 +135,22 @@ abstract class BaseReportBuilderPage extends Page implements HasForms
             $bands[$band->value] = MasonDocumentConverter::toBandEntries($state['bands'][$band->value] ?? []);
         }
 
-        app(ReportTemplateStorage::class)->save(
-            $this->scope,
-            $this->templateSlug,
-            $this->manifest,
-            $bands,
-            ReportTemplateType::tryFrom($this->type),
-        );
+        try {
+            app(ReportTemplateStorage::class)->save(
+                $this->scope,
+                $this->templateSlug,
+                $this->manifest,
+                $bands,
+                ReportTemplateType::tryFrom($this->type),
+            );
 
-        Notification::make()->title(trans('ip.template_saved'))->success()->send();
+            Notification::make()->title(trans('ip.template_saved'))->success()->send();
+        } catch (\Throwable $e) {
+            Log::warning("Report template save failed: {$e->getMessage()}", ['exception' => $e]);
+            Notification::make()->title(trans('ip.template_save_failed'))->danger()->send();
+
+            throw $e;
+        }
     }
 
     public function previewAction(): Action
@@ -198,6 +210,10 @@ abstract class BaseReportBuilderPage extends Page implements HasForms
     public function moveBrick(string $fromBand, int $position, string $toBand): void
     {
         abort_unless($this->canSave(), 403);
+
+        if ($this->managesSystemScope()) {
+            abort_unless(static::canAccess(), 403);
+        }
 
         $source = $this->data['bands'][$fromBand] ?? [];
 

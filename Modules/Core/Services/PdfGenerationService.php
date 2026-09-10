@@ -3,6 +3,7 @@
 namespace Modules\Core\Services;
 
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\File;
 use Modules\Core\Enums\ReportTemplateType;
 use Modules\Core\Support\PDF\PDFFactory;
 use Modules\Invoices\Models\Invoice;
@@ -56,14 +57,14 @@ class PdfGenerationService
     {
         return response($this->invoicePdf($invoice))
             ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'attachment; filename="' . $this->filename('invoice', (string) $invoice->invoice_number) . '"');
+            ->header('Content-Disposition', 'attachment; filename="' . $this->filename('invoice', (string) ($invoice->invoice_number ?: $invoice->id)) . '"');
     }
 
     public function downloadQuote(Quote $quote): Response
     {
         return response($this->quotePdf($quote))
             ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'attachment; filename="' . $this->filename('quote', (string) $quote->quote_number) . '"');
+            ->header('Content-Disposition', 'attachment; filename="' . $this->filename('quote', (string) ($quote->quote_number ?: $quote->id)) . '"');
     }
 
     /**
@@ -101,13 +102,56 @@ class PdfGenerationService
         }
 
         try {
-            return $this->storage->load(ReportTemplateStorage::SCOPE_SYSTEM, $slug, $type);
+            $template = $this->storage->load(ReportTemplateStorage::SCOPE_SYSTEM, $slug, $type);
+            if ($template !== null) {
+                return $template;
+            }
+        } catch (Throwable) {
+            // fall through to resource fallback
+        }
+
+        return $this->loadFromResources($slug, $type);
+    }
+
+    protected function loadFromResources(string $slug, ReportTemplateType $type): ?array
+    {
+        if ($slug === '' || preg_match('/^[a-z0-9][a-z0-9-]*$/', $slug) !== 1) {
+            return null;
+        }
+
+        $base = resource_path("report-templates/{$type->value}/{$slug}");
+        $manifestPath = $base . '/manifest.json';
+        $bandsPath = $base . '/bands.json';
+
+        if (! File::exists($manifestPath)) {
+            return null;
+        }
+
+        try {
+            $manifest = json_decode((string) File::get($manifestPath), true, 64, JSON_THROW_ON_ERROR);
+
+            if (! is_array($manifest)) {
+                return null;
+            }
+
+            $bands = [];
+            if (File::exists($bandsPath)) {
+                $decodedBands = json_decode((string) File::get($bandsPath), true, 64, JSON_THROW_ON_ERROR);
+                if (is_array($decodedBands)) {
+                    $bands = $decodedBands;
+                }
+            }
+
+            return [
+                'manifest' => $this->storage->sanitizeManifest($manifest),
+                'bands'    => $this->storage->sanitizeBands($bands, $type),
+            ];
         } catch (Throwable) {
             return null;
         }
     }
 
-    protected function filename(string $prefix, string $number): string
+    public function filename(string $prefix, string $number): string
     {
         $number = preg_replace('/[^A-Za-z0-9\-_]/', '-', $number) ?: 'document';
 

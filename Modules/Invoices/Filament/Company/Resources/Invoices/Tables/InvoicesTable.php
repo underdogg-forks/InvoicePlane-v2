@@ -192,14 +192,7 @@ class InvoicesTable
                         ->visible(fn () => auth()->user()?->can(Permission::DOWNLOAD_INVOICES->value))
                         ->label(trans('ip.download_pdf'))
                         ->action(function (Invoice $record) {
-                            $pdfService = app(\Modules\Core\Services\PdfGenerationService::class);
-
-                            return response()->streamDownload(
-                                function () use ($pdfService, $record): void {
-                                    echo $pdfService->invoicePdf($record);
-                                },
-                                'invoice-' . ($record->invoice_number ?: $record->id) . '.pdf',
-                            );
+                            return app(\Modules\Core\Services\PdfGenerationService::class)->downloadInvoice($record);
                         }),
                     EmailInvoiceAction::make()
                         ->visible(fn () => auth()->user()?->can(Permission::EMAIL_INVOICES->value))

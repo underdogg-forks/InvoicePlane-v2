@@ -1254,6 +1254,7 @@ return [
     'template_renamed'          => 'Template renamed',
     'template_deleted'          => 'Template deleted',
     'template_saved'            => 'Template saved',
+    'template_save_failed'      => 'Template save failed',
     'template_not_editable'     => 'This template cannot be modified from this panel',
     'invalid_template_name'     => 'That name cannot be turned into a valid template slug. Please use at least one letter or number.',
     'move_to_band'              => 'Move to band…',

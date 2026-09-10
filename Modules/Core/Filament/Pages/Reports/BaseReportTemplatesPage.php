@@ -91,6 +91,10 @@ abstract class BaseReportTemplatesPage extends Page
                     ->maxLength(100),
             ])
             ->action(function (array $arguments, array $data): void {
+                if ($this->managesSystemScope()) {
+                    abort_unless(static::canAccess(), 403);
+                }
+
                 try {
                     $clone = $this->storage()->clone(
                         (string) $arguments['scope'],
@@ -135,6 +139,10 @@ abstract class BaseReportTemplatesPage extends Page
                     ->maxLength(100),
             ])
             ->action(function (array $arguments, array $data): void {
+                if ($this->managesSystemScope()) {
+                    abort_unless(static::canAccess(), 403);
+                }
+
                 $template = [
                     'scope' => (string) $arguments['scope'],
                     'slug'  => (string) $arguments['slug'],
@@ -166,6 +174,10 @@ abstract class BaseReportTemplatesPage extends Page
             ->color('danger')
             ->requiresConfirmation()
             ->action(function (array $arguments): void {
+                if ($this->managesSystemScope()) {
+                    abort_unless(static::canAccess(), 403);
+                }
+
                 $template = [
                     'scope' => (string) $arguments['scope'],
                     'slug'  => (string) $arguments['slug'],

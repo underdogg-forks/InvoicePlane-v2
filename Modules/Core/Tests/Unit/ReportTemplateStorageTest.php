@@ -301,6 +301,44 @@ class ReportTemplateStorageTest extends AbstractTestCase
         $this->assertSame('invoice', $this->storage->listSystem(ReportTemplateType::INVOICE)[0]['type']);
     }
 
+    #[Test]
+    public function it_throws_runtime_exception_when_save_fails_to_write_manifest_or_bands(): void
+    {
+        /* Arrange */
+        $fakeDisk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $fakeDisk->shouldReceive('put')->andReturn(false);
+        Storage::set(ReportTemplateStorage::DISK, $fakeDisk);
+        \Illuminate\Support\Facades\Log::shouldReceive('warning')->atLeast()->once();
+
+        /* Assert */
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Failed to write report template');
+
+        /* Act */
+        $this->storage->save(ReportTemplateStorage::SCOPE_COMPANY, 'test-template', $this->manifest(), $this->bands());
+    }
+
+    #[Test]
+    public function it_throws_runtime_exception_when_rename_fails_to_write_manifest(): void
+    {
+        /* Arrange */
+        $this->storage->save(ReportTemplateStorage::SCOPE_COMPANY, 'test-template', $this->manifest(), $this->bands());
+
+        $fakeDisk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $fakeDisk->shouldReceive('exists')->andReturn(true);
+        $fakeDisk->shouldReceive('get')->andReturn(json_encode($this->manifest()));
+        $fakeDisk->shouldReceive('put')->andReturn(false);
+        Storage::set(ReportTemplateStorage::DISK, $fakeDisk);
+        \Illuminate\Support\Facades\Log::shouldReceive('warning')->atLeast()->once();
+
+        /* Assert */
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Failed to write report template');
+
+        /* Act */
+        $this->storage->rename(ReportTemplateStorage::SCOPE_COMPANY, 'test-template', 'New Name');
+    }
+
     protected function manifest(array $overrides = []): array
     {
         return array_merge([

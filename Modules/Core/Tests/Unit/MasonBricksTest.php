@@ -286,6 +286,50 @@ class MasonBricksTest extends AbstractTestCase
     }
 
     #[Test]
+    public function it_escapes_user_authored_data_fields_in_footer_bricks(): void
+    {
+        /* Arrange */
+        $malicious = '<script>alert(1)</script><b>ok</b>';
+
+        /* Act */
+        $notesHtml   = FooterNotesBrick::toHtml([], ['footer' => $malicious]);
+        $termsHtml   = FooterTermsBrick::toHtml([], ['terms' => $malicious]);
+        $summaryHtml = FooterSummaryBrick::toHtml([], ['summary' => $malicious]);
+
+        /* Assert */
+        $this->assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;', $notesHtml);
+        $this->assertStringNotContainsString('<script>', $notesHtml);
+
+        $this->assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;', $termsHtml);
+        $this->assertStringNotContainsString('<script>', $termsHtml);
+
+        $this->assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;', $summaryHtml);
+        $this->assertStringNotContainsString('<script>', $summaryHtml);
+    }
+
+    #[Test]
+    public function it_purifies_rich_content_config_in_footer_bricks_and_previews(): void
+    {
+        /* Arrange */
+        $richContent = '<script>alert(1)</script><b>allowed bold</b><p>paragraph</p>';
+
+        /* Act */
+        $notesHtml      = FooterNotesBrick::toHtml(['footer_content' => $richContent], []);
+        $notesPreview   = FooterNotesBrick::toPreviewHtml(['footer_content' => $richContent]);
+        $termsHtml      = FooterTermsBrick::toHtml(['terms_content' => $richContent], []);
+        $termsPreview   = FooterTermsBrick::toPreviewHtml(['terms_content' => $richContent]);
+        $summaryHtml    = FooterSummaryBrick::toHtml(['summary_content' => $richContent], []);
+        $summaryPreview = FooterSummaryBrick::toPreviewHtml(['summary_content' => $richContent]);
+
+        /* Assert */
+        foreach ([$notesHtml, $notesPreview, $termsHtml, $termsPreview, $summaryHtml, $summaryPreview] as $html) {
+            $this->assertStringNotContainsString('<script>', $html);
+            $this->assertStringNotContainsString('alert(1)', $html);
+            $this->assertStringContainsString('<b>allowed bold</b>', $html);
+        }
+    }
+
+    #[Test]
     public function it_footer_notes_brick_renders_rich_content_unescaped(): void
     {
         /* Arrange */

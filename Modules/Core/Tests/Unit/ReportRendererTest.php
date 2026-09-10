@@ -234,7 +234,71 @@ class ReportRendererTest extends AbstractTestCase
         /* Assert */
         $this->assertStringContainsString('report-band-header', $html);
         $this->assertStringContainsString('report-band-footer', $html);
-        $this->assertStringNotContainsString('class="report-group"', $html);
+        $this->assertSame(1, mb_substr_count($html, 'class="report-group"'));
+        $this->assertSame(1, mb_substr_count($html, 'report-band-details'));
+    }
+
+    #[Test]
+    public function it_continues_rendering_when_a_brick_throws_an_exception(): void
+    {
+        /* Arrange */
+        \Illuminate\Support\Facades\Log::shouldReceive('warning')
+            ->once()
+            ->with(\Mockery::pattern('/Report brick throwing_brick failed: Boom/'), \Mockery::any());
+
+        $throwingBrick = new class {
+            public static function getId(): string
+            {
+                return 'throwing_brick';
+            }
+
+            public static function toHtml(array $config, array $data): string
+            {
+                throw new \RuntimeException('Boom');
+            }
+        };
+
+        $renderer = new class extends ReportRenderer {
+            public function callRenderBrickSafely(string $brickClass, array $config, array $data): string
+            {
+                return $this->renderBrickSafely($brickClass, $config, $data);
+            }
+        };
+
+        /* Act */
+        $output = $renderer->callRenderBrickSafely(get_class($throwingBrick), [], []);
+
+        /* Assert */
+        $this->assertSame('<!-- report brick throwing_brick failed to render -->', $output);
+    }
+
+    #[Test]
+    public function it_renders_grouped_details_band_once_for_zero_item_documents(): void
+    {
+        /* Arrange */
+        $template = $this->template([
+            'header'       => [['brick' => 'header_company', 'width' => 'full', 'config' => []]],
+            'group_header' => [['brick' => 'detail_column_labels', 'width' => 'full', 'config' => []]],
+            'details'      => [['brick' => 'detail_items', 'width' => 'full', 'config' => []]],
+            'group_footer' => [['brick' => 'footer_totals', 'width' => 'full', 'config' => []]],
+            'footer'       => [['brick' => 'footer_notes', 'width' => 'full', 'config' => []]],
+        ], [
+            'band_options' => [
+                'details' => ['group_by' => 'category'],
+            ],
+        ]);
+
+        $data          = $this->data();
+        $data['items'] = [];
+
+        /* Act */
+        $html = $this->renderer->render($template, $data);
+
+        /* Assert */
+        $this->assertSame(1, mb_substr_count($html, 'class="report-group"'));
+        $this->assertSame(1, mb_substr_count($html, 'report-band-details'));
+        $this->assertStringContainsString('report-band-header', $html);
+        $this->assertStringContainsString('report-band-footer', $html);
     }
 
     protected function template(array $bands, array $manifest = []): array

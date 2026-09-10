@@ -160,6 +160,28 @@ class AdminReportBuilderTest extends AbstractAdminPanelTestCase
     }
 
     #[Test]
+    public function it_sends_danger_notification_and_logs_when_template_save_fails(): void
+    {
+        /* Arrange */
+        $fakeDisk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $fakeDisk->shouldReceive('put')->andReturn(false);
+        $fakeDisk->shouldReceive('exists')->andReturn(true);
+        $fakeDisk->shouldReceive('get')->andReturn(json_encode(['name' => 'Default Invoice', 'type' => 'invoice']));
+        Storage::set(ReportTemplateStorage::DISK, $fakeDisk);
+        \Illuminate\Support\Facades\Log::shouldReceive('warning')->atLeast()->once();
+
+        $component = Livewire::actingAs($this->superAdmin())
+            ->test(ReportBuilder::class, ['scope' => 'system', 'type' => 'invoice', 'slug' => 'default']);
+
+        /* Assert */
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Failed to write report template');
+
+        /* Act */
+        $component->call('save');
+    }
+
+    #[Test]
     public function it_hands_the_stored_width_back_to_the_canvas_on_load(): void
     {
         /* Arrange */
@@ -356,6 +378,46 @@ class AdminReportBuilderTest extends AbstractAdminPanelTestCase
          * it_refuses_to_rename_a_system_default_template for the direct case). */
         $template = $this->storage->load('system', 'default', ReportTemplateType::INVOICE);
         $this->assertNotSame('Hacked Name', $template['manifest']['name']);
+    }
+
+    #[Test]
+    public function it_forbids_assist_user_from_accessing_admin_report_templates_and_builder(): void
+    {
+        /* Arrange */
+        $this->withExceptionHandling();
+
+        /** @var \Modules\Core\Models\User $assistUser */
+        $assistUser = \Modules\Core\Models\User::factory()->create();
+        $assistUser->assignRole(\Modules\Core\Enums\UserRole::ASSIST->value);
+
+        /* Act & Assert */
+        Livewire::actingAs($assistUser)
+            ->test(ReportTemplates::class)
+            ->assertForbidden();
+
+        Livewire::actingAs($assistUser)
+            ->test(ReportBuilder::class, ['scope' => 'system', 'type' => 'invoice', 'slug' => 'default'])
+            ->assertForbidden();
+    }
+
+    #[Test]
+    public function it_allows_admin_to_access_and_save_admin_report_builder(): void
+    {
+        /* Arrange */
+        /** @var \Modules\Core\Models\User $adminUser */
+        $adminUser = \Modules\Core\Models\User::factory()->create();
+        $adminUser->assignRole(\Modules\Core\Enums\UserRole::ADMIN->value);
+
+        /* Act & Assert */
+        Livewire::actingAs($adminUser)
+            ->test(ReportTemplates::class)
+            ->assertSuccessful();
+
+        $component = Livewire::actingAs($adminUser)
+            ->test(ReportBuilder::class, ['scope' => 'system', 'type' => 'invoice', 'slug' => 'default'])
+            ->assertSuccessful();
+
+        $component->call('save')->assertHasNoErrors();
     }
 
     #[Test]
