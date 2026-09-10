@@ -3,17 +3,63 @@
 namespace Modules\Core\Tests\Unit;
 
 use Modules\Core\Support\PDF\Drivers\Browsershot;
+use Modules\Core\Support\PDF\PDFFactory;
 use Modules\Core\Tests\AbstractTestCase;
 use PHPUnit\Framework\Attributes\Test;
 use ReflectionProperty;
 use Spatie\Browsershot\Browsershot as BrowsershotEngine;
+use Throwable;
 
-/**
- * RB-12 (#753) — getEngine() is pure config-to-engine mapping. Assert it
- * without launching Chromium (no ->pdf() call).
- */
 class BrowsershotDriverTest extends AbstractTestCase
 {
+    #[Test]
+    public function it_is_resolved_by_the_factory_when_configured(): void
+    {
+        /* Arrange */
+        config()->set('ip.pdfDriver', 'Browsershot');
+
+        /* Assert */
+        $this->assertInstanceOf(Browsershot::class, PDFFactory::create());
+    }
+
+    #[Test]
+    public function it_does_not_include_allow_file_access_from_files_argument(): void
+    {
+        /* Arrange */
+        $driver = new Browsershot();
+
+        /* Act */
+        $engine = $driver->getEngine('<h1>Test</h1>');
+
+        /* Assert */
+        $args = $this->engineOptions($engine)['args'] ?? [];
+        $this->assertNotContains('allow-file-access-from-files', $args);
+        $this->assertNotContains('--allow-file-access-from-files', $args);
+    }
+
+    #[Test]
+    public function it_produces_pdf_bytes_from_html_when_chromium_is_available(): void
+    {
+        /* Arrange — opt-in driver: skip on hosts without Node/Chromium */
+        if (mb_trim((string) shell_exec('command -v node 2>/dev/null')) === '') {
+            $this->markTestSkipped('Node is not available on this host.');
+        }
+
+        try {
+            $output = (new Browsershot())->getOutput('<p>Hello Chromium PDF</p>');
+        } catch (Throwable $e) {
+            $this->markTestSkipped('Chromium/Puppeteer is not available: ' . mb_substr($e->getMessage(), 0, 120));
+        }
+
+        /* Assert */
+        $this->assertNotEmpty($output);
+        $this->assertStringStartsWith('%PDF', $output);
+    }
+
+    /**
+     * RB-12 (#753) — getEngine() is pure config-to-engine mapping. Assert it
+     * without launching Chromium (no ->pdf() call).
+     */
     #[Test]
     public function it_maps_the_paper_format_and_keeps_portrait_by_default(): void
     {
@@ -85,7 +131,7 @@ class BrowsershotDriverTest extends AbstractTestCase
      */
     private function engineOptions(BrowsershotEngine $engine): array
     {
-        return $this->engineProp($engine, 'additionalOptions');
+        return $this->engineProp($engine, 'additionalOptions') ?? [];
     }
 
     private function engineProp(BrowsershotEngine $engine, string $name): mixed
