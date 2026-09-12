@@ -112,17 +112,17 @@ class Relation extends Model
             ->where('type', 'shipping');
     }
 
+    /** @return MorphMany<Communication, $this> */
     public function communications(): MorphMany
     {
         return $this->morphMany(Communication::class, 'communicationable');
     }
 
+    /** @return MorphMany<Communication, $this> */
     public function ccEmailCommunications(): MorphMany
     {
-        /** @var MorphMany $relation */
-        $relation = $this->communications()->whereIn('communication_type', CommunicationType::ccTypes());
-
-        return $relation;
+        // @phpstan-ignore return.type (whereIn() on a typed relation resolves to a bare Query\Builder under PHPStan; the runtime object is still the relation)
+        return $this->communications()->whereIn('communication_type', CommunicationType::ccTypes());
     }
 
     public function contacts(): HasMany

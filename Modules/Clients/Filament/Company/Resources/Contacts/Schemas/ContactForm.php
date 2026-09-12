@@ -12,7 +12,9 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Modules\Clients\Enums\CommunicationType;
 use Modules\Clients\Enums\Gender;
+use Modules\Clients\Enums\RelationType;
 use Modules\Clients\Models\Contact;
+use Modules\Clients\Services\RelationService;
 
 class ContactForm
 {
@@ -39,8 +41,23 @@ class ContactForm
                                     ->createOptionForm([
                                         TextInput::make('company_name')
                                             ->label(trans('ip.customer_name'))
-                                            ->required(),
+                                            ->required()
+                                            // relations.company_name is varchar(150) —
+                                            // same overlong-input 500 risk as the main
+                                            // RelationForm's company_name field.
+                                            ->maxLength(150),
                                     ])
+                                    ->createOptionUsing(function (array $data): int {
+                                        // Filament's default createOptionUsing() does a raw
+                                        // Relation::create($data), which omits relation_type /
+                                        // relation_number / registered_at — all NOT NULL with no
+                                        // DB default — and 500s. RelationService::createRelation()
+                                        // fills those. Mirrors InvoiceForm's customer_id select.
+                                        return app(RelationService::class)->createRelation([
+                                            'relation_type' => RelationType::CUSTOMER->value,
+                                            'company_name'  => $data['company_name'],
+                                        ])->getKey();
+                                    })
                                     ->reactive(),
 
                                 Fieldset::make(trans('ip.client_information'))
@@ -65,11 +82,17 @@ class ContactForm
                             ->schema([
                                 TextInput::make('first_name')
                                     ->label(trans('ip.first_name'))
-                                    ->required(),
+                                    ->required()
+                                    // contacts.first_name is varchar(50) —
+                                    // without this, a longer value passes
+                                    // client validation and blows up as an
+                                    // unhandled SQL 500.
+                                    ->maxLength(50),
 
                                 TextInput::make('last_name')
                                     ->label(trans('ip.last_name'))
-                                    ->required(),
+                                    ->required()
+                                    ->maxLength(50),
 
                                 Placeholder::make('primary_email')
                                     ->label(trans('ip.email'))
