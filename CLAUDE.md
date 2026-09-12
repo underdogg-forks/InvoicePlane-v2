@@ -200,11 +200,18 @@ quoting has silently masked real bugs before (e.g. `->latest()` defaulting to a 
 `created_at` column on `$timestamps = false` models passed locally, failed on CI). Run via the
 `cli` compose service, which points at the stack's `db` service automatically:
 ```
-docker compose run --rm cli php artisan test --exclude-group failing,troubleshooting
+docker compose run --rm cli php artisan test
 ```
 No `.env.testing` edits needed — the `cli` service injects `DB_CONNECTION=mysql`/`DB_HOST=db` etc.
 itself. Use `php artisan test`, not `vendor/bin/phpunit` directly — the two have been observed to
 behave differently for this app's Livewire form tests; `artisan test` is the reliable one.
+
+**Do not pass `--exclude-group` on the CLI.** PHPUnit 13's `--exclude-group` was found to
+*override* (not merge with) phpunit.xml's own `<groups><exclude>` config, and separately fails to
+split a comma-separated value (`failing,troubleshooting`) into multiple groups at all — either way,
+tests tagged `failing`/`flaky`/`troubleshooting`/`slow` end up running instead of being skipped.
+phpunit.xml already excludes those groups by default, so a bare `php artisan test` is correct and
+sufficient — see `.github/workflows/phpunit.yml`'s "Run PHPUnit" step for the same finding.
 **Known issue:** a freshly-rebuilt `cli` image has reproduced false Livewire-form failures at
 scale even under `artisan test`, for reasons not yet isolated — see
 [#689](https://github.com/InvoicePlane/InvoicePlane-v2/issues/689) and sanity-check with

@@ -21,6 +21,31 @@ use Modules\Invoices\Peppol\Clients\BasePeppolClient;
 class EInvoiceBeClient extends BasePeppolClient
 {
     /**
+     * Get the list of configuration keys this provider requires from merchant_clients.
+     *
+     * @return array<string>
+     */
+    public static function settings(): array
+    {
+        return ['api_key'];
+    }
+
+    /**
+     * Authenticate with e-invoice.be using API key.
+     *
+     * e-invoice.be uses simple API key authentication — no token exchange required.
+     * This method validates the API key is present.
+     *
+     * @param array $credentials Must contain 'api_key'
+     *
+     * @return bool True if API key is present and valid
+     */
+    public function authenticate(array $credentials = []): bool
+    {
+        return ! empty($credentials['api_key']);
+    }
+
+    /**
      * Get authentication headers for e-invoice.be API.
      *
      * e-invoice.be uses API key authentication via the X-API-Key header.
@@ -42,30 +67,5 @@ class EInvoiceBeClient extends BasePeppolClient
     protected function getTimeout(): int
     {
         return (int) config('invoices.peppol.e_invoice_be.timeout', 90);
-    }
-
-    /**
-     * Authenticate with e-invoice.be using API key.
-     *
-     * e-invoice.be uses simple API key authentication — no token exchange required.
-     * This method validates the API key is present.
-     *
-     * @param array $credentials Must contain 'api_key'
-     *
-     * @return bool True if API key is present and valid
-     */
-    public function authenticate(array $credentials = []): bool
-    {
-        return !empty($credentials['api_key']);
-    }
-
-    /**
-     * Get the list of configuration keys this provider requires from merchant_clients.
-     *
-     * @return array<string>
-     */
-    public static function settings(): array
-    {
-        return ['api_key'];
     }
 }

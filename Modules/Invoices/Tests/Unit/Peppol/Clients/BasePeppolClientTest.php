@@ -20,6 +20,7 @@ use PHPUnit\Framework\Attributes\Test;
 class BasePeppolClientTest extends AbstractTestCase
 {
     private TestPeppolClient $client;
+
     private MockHttpClient $mockClient;
 
     protected function setUp(): void
@@ -141,10 +142,7 @@ class MockHttpClient implements HttpClientInterface
 {
     public function request(RequestMethod|string $method, string $uri, array $options = []): Response
     {
-        return new Response(new \Illuminate\Http\Client\Request(
-            $method instanceof RequestMethod ? $method->value : $method,
-            $uri
-        ), new \GuzzleHttp\Psr7\Response());
+        return new Response(new \GuzzleHttp\Psr7\Response());
     }
 }
 
@@ -153,11 +151,6 @@ class MockHttpClient implements HttpClientInterface
  */
 class TestPeppolClient extends BasePeppolClient
 {
-    protected function getAuthenticationHeaders(): array
-    {
-        return ['Authorization' => 'Bearer test-token'];
-    }
-
     public function testBuildUrl(string $path): string
     {
         return $this->buildUrl($path);
@@ -166,5 +159,10 @@ class TestPeppolClient extends BasePeppolClient
     public function testGetRequestOptions(array $options = []): array
     {
         return $this->getRequestOptions($options);
+    }
+
+    protected function getAuthenticationHeaders(): array
+    {
+        return ['Authorization' => 'Bearer test-token'];
     }
 }

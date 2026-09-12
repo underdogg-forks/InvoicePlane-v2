@@ -36,9 +36,9 @@ class PeppolManagementService
      * The integration is created disabled (awaiting testing) and its configuration is stored via the
      * shared merchant_clients key-value credential table.
      *
-     * @param int   $companyId    the ID of the company that will own the integration
+     * @param int    $companyId    the ID of the company that will own the integration
      * @param string $providerName the provider identifier/name for the Peppol integration
-     * @param array $config       associative configuration values to attach to the integration
+     * @param array  $config       associative configuration values to attach to the integration
      *
      * @return PeppolIntegration the newly created PeppolIntegration model (initially disabled until tested)
      */

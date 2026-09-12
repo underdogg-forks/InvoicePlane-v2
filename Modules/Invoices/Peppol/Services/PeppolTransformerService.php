@@ -71,7 +71,7 @@ class PeppolTransformerService
      *         postal_code: null|string,
      *         country_code: null|string
      *     }
-     * } Supplier structure with address fields mapped for Peppol.
+     * } Supplier structure with address fields mapped for Peppol
      */
     protected function transformSupplier(Invoice $invoice): array
     {
@@ -167,8 +167,8 @@ class PeppolTransformerService
             ->groupBy('tax_rate_id')
             ->map(function ($items) {
                 $taxableAmount = $items->sum('subtotal');
-                $taxAmount = $items->sum('tax_total');
-                $taxRate = $items->first()->taxRate?->rate ?? 0;
+                $taxAmount     = $items->sum('tax_total');
+                $taxRate       = $items->first()->taxRate?->rate ?? 0;
 
                 return [
                     'taxable_amount' => $taxableAmount,

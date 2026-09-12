@@ -7,6 +7,7 @@ use Modules\Invoices\Peppol\Clients\Storecove\DocumentSubmissionsClient;
 use Modules\Invoices\Peppol\Clients\Storecove\ReceivedDocumentsClient;
 use Modules\Invoices\Peppol\Clients\Storecove\StorecoveClient;
 use Modules\Invoices\Peppol\Providers\BaseProvider;
+use Throwable;
 
 /**
  * StorecoveProvider - Storecove Peppol provider implementation.
@@ -17,6 +18,7 @@ use Modules\Invoices\Peppol\Providers\BaseProvider;
 class StorecoveProvider extends BaseProvider
 {
     protected DocumentSubmissionsClient $documentSubmissionsClient;
+
     protected ReceivedDocumentsClient $receivedDocumentsClient;
 
     public function __construct(
@@ -45,6 +47,18 @@ class StorecoveProvider extends BaseProvider
                 $this->getDefaultBaseUrl()
             );
         }
+    }
+
+    /**
+     * Get the declarative settings schema for Storecove.
+     *
+     * Delegates to the client's static method for a single source of truth.
+     *
+     * @return array<string> list of config keys
+     */
+    public static function settings(): array
+    {
+        return StorecoveClient::settings();
     }
 
     public function getProviderName(): string
@@ -87,7 +101,7 @@ class StorecoveProvider extends BaseProvider
                 'ok'      => false,
                 'message' => 'Connection failed: ' . ($response->body() ?: 'HTTP ' . $response->status()),
             ];
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return [
                 'ok'      => false,
                 'message' => 'Connection failed: ' . $e->getMessage(),
@@ -110,18 +124,18 @@ class StorecoveProvider extends BaseProvider
     public function sendInvoice(array $transmissionData): array
     {
         try {
-            $xml = $transmissionData['xml'] ?? '';
+            $xml             = $transmissionData['xml'] ?? '';
             $recipientScheme = $transmissionData['recipient_scheme'] ?? '';
-            $recipientId = $transmissionData['recipient_id'] ?? '';
-            $legalEntityId = $this->getLegalEntityId();
+            $recipientId     = $transmissionData['recipient_id'] ?? '';
+            $legalEntityId   = $this->getLegalEntityId();
 
             $payload = [
                 'legalEntityId' => (int) $legalEntityId,
                 'document'      => [
                     'rawDocumentData' => [
-                        'document'       => base64_encode($xml),
-                        'documentType'   => 'invoice',
-                        'parseStrategy'  => 'ubl',
+                        'document'      => base64_encode($xml),
+                        'documentType'  => 'invoice',
+                        'parseStrategy' => 'ubl',
                     ],
                 ],
                 'routing' => [
@@ -136,7 +150,7 @@ class StorecoveProvider extends BaseProvider
 
             $response = $this->documentSubmissionsClient->submitDocument($payload);
 
-            if (!$response->successful()) {
+            if ( ! $response->successful()) {
                 return [
                     'accepted'    => false,
                     'external_id' => null,
@@ -155,7 +169,7 @@ class StorecoveProvider extends BaseProvider
                 'message'     => 'Document submitted to Storecove',
                 'response'    => $response->json(),
             ];
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return [
                 'accepted'    => false,
                 'external_id' => null,
@@ -171,7 +185,7 @@ class StorecoveProvider extends BaseProvider
         try {
             $response = $this->documentSubmissionsClient->getEvidence($externalId, 'sending');
 
-            if (!$response->successful()) {
+            if ( ! $response->successful()) {
                 return [
                     'status'      => 'error',
                     'ack_payload' => ['error' => 'Failed to retrieve transmission status'],
@@ -184,7 +198,7 @@ class StorecoveProvider extends BaseProvider
                 'status'      => $status,
                 'ack_payload' => $response->json(),
             ];
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return [
                 'status'      => 'error',
                 'ack_payload' => ['error' => $e->getMessage()],
@@ -200,11 +214,6 @@ class StorecoveProvider extends BaseProvider
         ];
     }
 
-    protected function getDefaultBaseUrl(): string
-    {
-        return 'https://api.storecove.com/api/v2';
-    }
-
     public function getApiKey(): ?string
     {
         return $this->config['api_key'] ?? null;
@@ -215,15 +224,8 @@ class StorecoveProvider extends BaseProvider
         return $this->config['legal_entity_id'] ?? null;
     }
 
-    /**
-     * Get the declarative settings schema for Storecove.
-     *
-     * Delegates to the client's static method for a single source of truth.
-     *
-     * @return array<string, array> map of config key => settings metadata
-     */
-    public static function settings(): array
+    protected function getDefaultBaseUrl(): string
     {
-        return StorecoveClient::settings();
+        return 'https://api.storecove.com/api/v2';
     }
 }

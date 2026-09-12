@@ -42,10 +42,26 @@ class EInvoiceBeProvider extends BaseProvider
     ) {
         parent::__construct($integration);
 
-        $this->documentsClient    = $documentsClient ?? app(DocumentsClient::class);
-        $this->participantsClient = $participantsClient ?? app(ParticipantsClient::class);
-        $this->trackingClient     = $trackingClient ?? app(TrackingClient::class);
-        $this->healthClient       = $healthClient ?? app(HealthClient::class);
+        $httpClient = app(\Modules\Invoices\Http\Contracts\HttpClientInterface::class);
+        $apiKey     = $this->getApiKey() ?? '';
+        $baseUrl    = $this->getDefaultBaseUrl();
+
+        $this->documentsClient    = $documentsClient ?? new DocumentsClient($httpClient, $apiKey, $baseUrl);
+        $this->participantsClient = $participantsClient ?? new ParticipantsClient($httpClient, $apiKey, $baseUrl);
+        $this->trackingClient     = $trackingClient ?? new TrackingClient($httpClient, $apiKey, $baseUrl);
+        $this->healthClient       = $healthClient ?? new HealthClient($httpClient, $apiKey, $baseUrl);
+    }
+
+    /**
+     * Get the declarative settings schema for e-invoice.be.
+     *
+     * Delegates to the client's static method for a single source of truth.
+     *
+     * @return array<string> list of config keys
+     */
+    public static function settings(): array
+    {
+        return EInvoiceBeClient::settings();
     }
 
     /**
@@ -359,18 +375,6 @@ class EInvoiceBeProvider extends BaseProvider
     public function getApiKey(): ?string
     {
         return $this->config['api_key'] ?? null;
-    }
-
-    /**
-     * Get the declarative settings schema for e-invoice.be.
-     *
-     * Delegates to the client's static method for a single source of truth.
-     *
-     * @return array<string, array> map of config key => settings metadata
-     */
-    public static function settings(): array
-    {
-        return EInvoiceBeClient::settings();
     }
 
     /**

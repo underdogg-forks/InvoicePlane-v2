@@ -12,13 +12,13 @@ use Modules\Core\Traits\BelongsToCompany;
  * Company-scoped and stores sensitive credentials (API keys, client secrets, access tokens)
  * transparently encrypted at rest via the 'encrypted' cast on merchant_value.
  *
- * @property int                           $id
- * @property int|null                      $company_id
- * @property string                        $driver provider/gateway identifier (e.g., 'stripe', 'lets_peppol')
- * @property string                        $merchant_key configuration key (e.g., 'api_key', 'client_id')
- * @property string|encrypted              $merchant_value configuration value (encrypted at rest)
- * @property string|null                   $label optional human-friendly label for disambiguation
- * @property Company|null                  $company
+ * @property int          $id
+ * @property int|null     $company_id
+ * @property string       $driver         provider/gateway identifier (e.g., 'stripe', 'lets_peppol')
+ * @property string       $merchant_key   configuration key (e.g., 'api_key', 'client_id')
+ * @property string       $merchant_value configuration value (encrypted at rest)
+ * @property string|null  $label          optional human-friendly label for disambiguation
+ * @property Company|null $company
  */
 class MerchantClient extends Model
 {

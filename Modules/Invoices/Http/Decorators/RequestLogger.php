@@ -6,6 +6,7 @@ use Illuminate\Http\Client\Response;
 use Modules\Invoices\Http\Contracts\HttpClientInterface;
 use Modules\Invoices\Http\RequestMethod;
 use Modules\Invoices\Http\Traits\LogsApiRequests;
+use Throwable;
 
 /**
  * RequestLogger - Decorator that logs HTTP requests and responses.
@@ -33,7 +34,7 @@ class RequestLogger implements HttpClientInterface
             $this->logResponse($methodStr, $uri, $response->status(), $response->json() ?? $response->body());
 
             return $response;
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->logError('Request', $methodStr, $uri, $e->getMessage());
             throw $e;
         }

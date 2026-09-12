@@ -5,12 +5,12 @@ namespace Modules\Invoices\Filament\Admin\Resources\PeppolIntegrations\Schemas;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Modules\Core\Models\Company;
 use Modules\Invoices\Peppol\Providers\ProviderFactory;
+use Throwable;
 
 class PeppolIntegrationForm
 {
@@ -50,7 +50,7 @@ class PeppolIntegrationForm
                 Section::make('Provider Configuration')
                     ->schema(self::getDynamicProviderFields())
                     ->columnSpanFull()
-                    ->visible(fn ($get) => !empty($get('provider_name'))),
+                    ->visible(fn ($get) => ! empty($get('provider_name'))),
             ]);
     }
 
@@ -67,7 +67,7 @@ class PeppolIntegrationForm
             return collect($providers)
                 ->mapWithKeys(fn (string $class, string $name): array => [$name => ucfirst(str_replace('_', ' ', $name))])
                 ->all();
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return [];
         }
     }

@@ -22,6 +22,16 @@ class LetsPeppolClient extends BasePeppolClient
         $this->accessToken = $accessToken;
     }
 
+    /**
+     * Get the list of configuration keys this provider requires from merchant_clients.
+     *
+     * @return array<string>
+     */
+    public static function settings(): array
+    {
+        return ['client_id', 'client_secret', 'access_token'];
+    }
+
     protected function getAuthenticationHeaders(): array
     {
         return [
@@ -42,15 +52,5 @@ class LetsPeppolClient extends BasePeppolClient
     protected function tokenUrl(): ?string
     {
         return 'https://auth.letspeppol.com/oauth/token';
-    }
-
-    /**
-     * Get the list of configuration keys this provider requires from merchant_clients.
-     *
-     * @return array<string>
-     */
-    public static function settings(): array
-    {
-        return ['client_id', 'client_secret', 'access_token'];
     }
 }

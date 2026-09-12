@@ -28,11 +28,11 @@ return new class () extends Migration {
 
                     foreach ($configs as $config) {
                         DB::table('merchant_clients')->insertOrIgnore([
-                            'company_id'      => $integration->company_id,
-                            'driver'          => $integration->provider_name,
-                            'merchant_key'    => $config->config_key,
-                            'merchant_value'  => $config->config_value,
-                            'label'           => null,
+                            'company_id'     => $integration->company_id,
+                            'driver'         => $integration->provider_name,
+                            'merchant_key'   => $config->config_key,
+                            'merchant_value' => $config->config_value,
+                            'label'          => null,
                         ]);
                     }
                 }

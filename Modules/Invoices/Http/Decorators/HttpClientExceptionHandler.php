@@ -61,7 +61,7 @@ class HttpClientExceptionHandler implements HttpClientInterface
 
             throw $e;
         } catch (ConnectionException $e) {
-            throw new ConnectionException("Connection error: " . $e->getMessage(), 0, $e);
+            throw new ConnectionException('Connection error: ' . $e->getMessage(), 0, $e);
         }
     }
 
@@ -70,21 +70,21 @@ class HttpClientExceptionHandler implements HttpClientInterface
      *
      * Can be overridden in subclasses for custom exception mapping per client family.
      *
-     * @param int                  $statusCode The HTTP status code
-     * @param RequestException     $original   The original exception
+     * @param int              $statusCode The HTTP status code
+     * @param RequestException $original   The original exception
      *
      * @return void Transforms the exception in-place or re-throws original
      */
     protected function mapStatusCodeToException(int $statusCode, RequestException $original): void
     {
         match($statusCode) {
-            400, 422 => null,  // Validation error — pass through
-            401 => null,       // Unauthorized
-            403 => null,       // Forbidden
-            404 => null,       // Not Found
-            429 => null,       // Too Many Requests — caller can implement backoff
+            400, 422           => null,  // Validation error — pass through
+            401                => null,       // Unauthorized
+            403                => null,       // Forbidden
+            404                => null,       // Not Found
+            429                => null,       // Too Many Requests — caller can implement backoff
             500, 502, 503, 504 => null,  // Server errors
-            default => null,
+            default            => null,
         };
     }
 }

@@ -2,6 +2,7 @@
 
 namespace Modules\Invoices\Tests\Support;
 
+use Closure;
 use Illuminate\Http\Client\Response;
 use Modules\Invoices\Http\Contracts\HttpClientInterface;
 use Modules\Invoices\Http\RequestMethod;
@@ -14,6 +15,7 @@ use Modules\Invoices\Http\RequestMethod;
 class FakeHttpClient implements HttpClientInterface
 {
     private array $responses = [];
+
     private array $requestLog = [];
 
     public function queueResponse(array $jsonData, int $status = 200): self
@@ -38,21 +40,12 @@ class FakeHttpClient implements HttpClientInterface
         return new Response($psrResponse);
     }
 
-    protected function recordRequest(RequestMethod|string $method, string $uri, array $options): void
-    {
-        $this->requestLog[] = [
-            'method'  => $method instanceof RequestMethod ? $method->value : $method,
-            'uri'     => $uri,
-            'options' => $options,
-        ];
-    }
-
     public function getRequestLog(): array
     {
         return $this->requestLog;
     }
 
-    public function assertSent(\Closure $callback): void
+    public function assertSent(Closure $callback): void
     {
         $found = false;
         foreach ($this->requestLog as $request) {
@@ -62,7 +55,7 @@ class FakeHttpClient implements HttpClientInterface
             }
         }
 
-        if (!$found) {
+        if ( ! $found) {
             throw new \PHPUnit\Framework\AssertionFailedError('Expected request not found in log');
         }
     }
@@ -74,5 +67,14 @@ class FakeHttpClient implements HttpClientInterface
 
             return isset($headers['Authorization']) && $headers['Authorization'] === "Bearer {$token}";
         });
+    }
+
+    protected function recordRequest(RequestMethod|string $method, string $uri, array $options): void
+    {
+        $this->requestLog[] = [
+            'method'  => $method instanceof RequestMethod ? $method->value : $method,
+            'uri'     => $uri,
+            'options' => $options,
+        ];
     }
 }

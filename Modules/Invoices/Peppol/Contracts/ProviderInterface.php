@@ -13,6 +13,15 @@ use Illuminate\Http\Client\Response;
 interface ProviderInterface
 {
     /**
+     * Get the list of configuration keys this provider requires from merchant_clients.
+     *
+     * Each key is retrieved from the merchant_clients table, scoped by company_id and provider name.
+     *
+     * @return array<string> list of config keys (e.g., ['api_key'], ['client_id', 'client_secret', 'access_token'])
+     */
+    public static function settings(): array;
+
+    /**
      * Test the connection with provider credentials.
      *
      * @param array $config Provider-specific configuration
@@ -86,15 +95,6 @@ interface ProviderInterface
      * @return bool true if authentication succeeded or credentials are valid, false otherwise
      */
     public function authenticate(): bool;
-
-    /**
-     * Get the list of configuration keys this provider requires from merchant_clients.
-     *
-     * Each key is retrieved from the merchant_clients table, scoped by company_id and provider name.
-     *
-     * @return array<string> list of config keys (e.g., ['api_key'], ['client_id', 'client_secret', 'access_token'])
-     */
-    public static function settings(): array;
 
     /**
      * Classify a provider error into a generic category.

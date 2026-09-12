@@ -324,7 +324,7 @@ class SendInvoiceToPeppolJob implements ShouldQueue
             $transmission->id
         );
 
-        $html = app(\Modules\Invoices\Services\InvoiceService::class)->renderHtml($this->invoice);
+        $html       = app(\Modules\Invoices\Services\InvoiceService::class)->renderHtml($this->invoice);
         $pdfContent = \Modules\Core\Support\PDF\PDFFactory::create()->getOutput($html);
 
         Storage::put($path, $pdfContent);

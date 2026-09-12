@@ -396,11 +396,11 @@ class QuoteService extends BaseService
             ->first();
 
         $placeholders = [
-            'quote.number'                => $quote->quote_number,
-            'quote.total_formatted'       => number_format((float) $quote->quote_total, 2),
-            'quote.expires_at_formatted'  => DateHelpers::formatDate($quote->quote_expires_at),
-            'customer.name'               => $quote->prospect?->company_name,
-            'company.name'                => $quote->company?->name,
+            'quote.number'               => $quote->quote_number,
+            'quote.total_formatted'      => number_format((float) $quote->quote_total, 2),
+            'quote.expires_at_formatted' => DateHelpers::formatDate($quote->quote_expires_at),
+            'customer.name'              => $quote->prospect?->company_name,
+            'company.name'               => $quote->company?->name,
         ];
 
         $defaultSubject = trans('ip.email_quote_default_subject', ['number' => $quote->quote_number]);

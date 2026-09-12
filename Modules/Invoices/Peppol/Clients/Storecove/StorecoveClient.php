@@ -2,7 +2,6 @@
 
 namespace Modules\Invoices\Peppol\Clients\Storecove;
 
-use Modules\Invoices\Http\Contracts\HttpClientInterface;
 use Modules\Invoices\Peppol\Clients\BasePeppolClient;
 
 /**
@@ -13,6 +12,16 @@ use Modules\Invoices\Peppol\Clients\BasePeppolClient;
  */
 class StorecoveClient extends BasePeppolClient
 {
+    /**
+     * Get the list of configuration keys this provider requires from merchant_clients.
+     *
+     * @return array<string>
+     */
+    public static function settings(): array
+    {
+        return ['api_key', 'legal_entity_id'];
+    }
+
     protected function getAuthenticationHeaders(): array
     {
         return [
@@ -23,15 +32,5 @@ class StorecoveClient extends BasePeppolClient
     protected function getTimeout(): int
     {
         return 30;
-    }
-
-    /**
-     * Get the list of configuration keys this provider requires from merchant_clients.
-     *
-     * @return array<string>
-     */
-    public static function settings(): array
-    {
-        return ['api_key', 'legal_entity_id'];
     }
 }

@@ -39,8 +39,8 @@ class PeppolIntegrationsTable
                     ->formatStateUsing(fn (?PeppolConnectionStatus $state): ?string => $state?->label())
                     ->color(fn (?PeppolConnectionStatus $state): ?string => match ($state) {
                         PeppolConnectionStatus::SUCCESS => 'success',
-                        PeppolConnectionStatus::FAILED => 'danger',
-                        null => 'gray',
+                        PeppolConnectionStatus::FAILED  => 'danger',
+                        null                            => 'gray',
                     })
                     ->sortable(),
 

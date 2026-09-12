@@ -2,6 +2,8 @@
 
 namespace Modules\Invoices\Peppol\Validation;
 
+use DOMDocument;
+
 /**
  * PeppolXmlValidator - Validates generated Peppol XML (structural check).
  *
@@ -21,7 +23,7 @@ class PeppolXmlValidator
     /**
      * Validate XML for structural well-formedness and XSD schema compliance.
      *
-     * @param string $xml The XML content to validate
+     * @param string $xml    The XML content to validate
      * @param string $format The document format (e.g., 'peppol_bis_3.0', 'ubl_2.1')
      *
      * @return array Validation errors (empty array = valid)
@@ -32,7 +34,7 @@ class PeppolXmlValidator
 
         /* Tier 1: Well-formedness check */
         $errors = array_merge($errors, $this->validateWellFormed($xml));
-        if (!empty($errors)) {
+        if ( ! empty($errors)) {
             return $errors; // Stop here if XML is malformed
         }
 
@@ -45,14 +47,14 @@ class PeppolXmlValidator
     protected function validateWellFormed(string $xml): array
     {
         libxml_use_internal_errors(true);
-        $dom = new \DOMDocument();
+        $dom = new DOMDocument();
 
-        if (!$dom->loadXML($xml, LIBXML_NONET)) {
+        if ( ! $dom->loadXML($xml, LIBXML_NONET)) {
             $errors = libxml_get_errors();
             libxml_clear_errors();
             libxml_use_internal_errors(false);
 
-            return array_map(fn($e) => $e->message, $errors);
+            return array_map(fn ($e) => $e->message, $errors);
         }
 
         libxml_clear_errors();

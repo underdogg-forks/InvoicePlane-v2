@@ -27,7 +27,7 @@ class InvoicesClient extends SuperPdpClient
             'headers' => ['Content-Type' => 'application/pdf'],
         ]);
 
-        if (!empty($query)) {
+        if ( ! empty($query)) {
             $url .= '?' . http_build_query($query);
         }
 

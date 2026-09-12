@@ -19,20 +19,14 @@ class QontoClient extends BasePeppolClient
         $this->stagingToken = $stagingToken;
     }
 
-    protected function getAuthenticationHeaders(): array
+    /**
+     * Get the list of configuration keys this provider requires from merchant_clients.
+     *
+     * @return array<string>
+     */
+    public static function settings(): array
     {
-        $headers = ['Authorization' => 'Bearer ' . $this->apiKey];
-
-        if ($this->stagingToken) {
-            $headers['X-Qonto-Staging-Token'] = $this->stagingToken;
-        }
-
-        return $headers;
-    }
-
-    protected function getTimeout(): int
-    {
-        return 30;
+        return ['access_token', 'staging_token'];
     }
 
     /**
@@ -47,16 +41,22 @@ class QontoClient extends BasePeppolClient
      */
     public function authenticate(array $credentials = []): bool
     {
-        return !empty($credentials['access_token'] || $credentials['api_key']);
+        return ! empty($credentials['access_token'] || $credentials['api_key']);
     }
 
-    /**
-     * Get the list of configuration keys this provider requires from merchant_clients.
-     *
-     * @return array<string>
-     */
-    public static function settings(): array
+    protected function getAuthenticationHeaders(): array
     {
-        return ['access_token', 'staging_token'];
+        $headers = ['Authorization' => 'Bearer ' . $this->apiKey];
+
+        if ($this->stagingToken) {
+            $headers['X-Qonto-Staging-Token'] = $this->stagingToken;
+        }
+
+        return $headers;
+    }
+
+    protected function getTimeout(): int
+    {
+        return 30;
     }
 }

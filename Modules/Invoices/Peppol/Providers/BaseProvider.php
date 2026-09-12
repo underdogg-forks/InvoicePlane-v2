@@ -95,20 +95,6 @@ abstract class BaseProvider implements ProviderInterface
     }
 
     /**
-     * Resolve the provider's base URL.
-     *
-     * Looks up a base URL from the provider instance config, then from the application
-     * configuration for the provider, and falls back to the provider's default.
-     *
-     * @return string The resolved base URL. */
-    protected function getBaseUrl(): string
-    {
-        return $this->config['base_url']
-            ?? config("invoices.peppol.{$this->getProviderName()}.base_url")
-            ?? $this->getDefaultBaseUrl();
-    }
-
-    /**
      * Default authenticate implementation for providers using static credentials.
      *
      * Checks that all settings from the provider's schema are present and non-empty.
@@ -128,5 +114,19 @@ abstract class BaseProvider implements ProviderInterface
         }
 
         return true;
+    }
+
+    /**
+     * Resolve the provider's base URL.
+     *
+     * Looks up a base URL from the provider instance config, then from the application
+     * configuration for the provider, and falls back to the provider's default.
+     *
+     * @return string The resolved base URL. */
+    protected function getBaseUrl(): string
+    {
+        return $this->config['base_url']
+            ?? config("invoices.peppol.{$this->getProviderName()}.base_url")
+            ?? $this->getDefaultBaseUrl();
     }
 }

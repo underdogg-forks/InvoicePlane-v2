@@ -21,14 +21,16 @@ use PHPUnit\Framework\Attributes\Test;
 class StorecoveProviderTest extends AbstractTestCase
 {
     private StorecoveProvider $provider;
+
     private MockDocumentSubmissionsClient $mockDocsClient;
+
     private MockReceivedDocumentsClient $mockReceivedClient;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->mockDocsClient = new MockDocumentSubmissionsClient();
+        $this->mockDocsClient     = new MockDocumentSubmissionsClient();
         $this->mockReceivedClient = new MockReceivedDocumentsClient();
 
         $this->provider = new StorecoveProvider(
@@ -117,6 +119,7 @@ class StorecoveProviderTest extends AbstractTestCase
 class MockDocumentSubmissionsClient extends DocumentSubmissionsClient
 {
     private array $responses = [];
+
     private MockHttpClient $mockClient;
 
     public function __construct()

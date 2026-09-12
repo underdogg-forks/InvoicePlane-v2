@@ -11,16 +11,16 @@ use Modules\Core\Traits\BelongsToCompany;
 use Modules\Invoices\Enums\PeppolConnectionStatus;
 
 /**
- * @property int                       $id
- * @property int                       $company_id
- * @property string                    $provider_name
- * @property PeppolConnectionStatus    $test_connection_status
- * @property string|null               $test_connection_message
- * @property CarbonInterface|null      $test_connection_at
- * @property bool                      $enabled
- * @property Company                   $company
- * @property PeppolTransmission[]      $transmissions
- * @property MerchantClient[]          $configurations
+ * @property int                    $id
+ * @property int                    $company_id
+ * @property string                 $provider_name
+ * @property PeppolConnectionStatus $test_connection_status
+ * @property string|null            $test_connection_message
+ * @property CarbonInterface|null   $test_connection_at
+ * @property bool                   $enabled
+ * @property Company                $company
+ * @property PeppolTransmission[]   $transmissions
+ * @property MerchantClient[]       $configurations
  */
 class PeppolIntegration extends Model
 {
@@ -37,18 +37,6 @@ class PeppolIntegration extends Model
         'enabled'                => 'boolean',
         'test_connection_at'     => 'datetime',
     ];
-
-    protected static function booted(): void
-    {
-        // Do not apply global company scope to this model during Filament admin access,
-        // where an admin managing integrations across companies should see all of them.
-        // This is a shared cross-company registry, not company-scoped data.
-        if (app()->runningInConsole()) {
-            static::addGlobalScope('skip_company_scope', function ($query): void {
-                // In console (migrations, commands), skip the global scope entirely
-            });
-        }
-    }
 
     /**
      * Get the transmissions associated with this integration.
@@ -69,8 +57,11 @@ class PeppolIntegration extends Model
      */
     public function configurations(): HasMany
     {
-        return $this->hasMany(MerchantClient::class, 'company_id', 'company_id')
+        /** @var HasMany $relation */
+        $relation = $this->hasMany(MerchantClient::class, 'company_id', 'company_id')
             ->where('driver', $this->provider_name);
+
+        return $relation;
     }
 
     /**
@@ -98,9 +89,9 @@ class PeppolIntegration extends Model
         foreach ($config as $key => $value) {
             MerchantClient::updateOrCreate(
                 [
-                    'company_id'    => $this->company_id,
-                    'driver'        => $this->provider_name,
-                    'merchant_key'  => $key,
+                    'company_id'   => $this->company_id,
+                    'driver'       => $this->provider_name,
+                    'merchant_key' => $key,
                 ],
                 ['merchant_value' => $value]
             );
@@ -145,5 +136,17 @@ class PeppolIntegration extends Model
     public function isReady(): bool
     {
         return $this->enabled && $this->isConnectionSuccessful();
+    }
+
+    protected static function booted(): void
+    {
+        // Do not apply global company scope to this model during Filament admin access,
+        // where an admin managing integrations across companies should see all of them.
+        // This is a shared cross-company registry, not company-scoped data.
+        if (app()->runningInConsole()) {
+            static::addGlobalScope('skip_company_scope', function ($query): void {
+                // In console (migrations, commands), skip the global scope entirely
+            });
+        }
     }
 }

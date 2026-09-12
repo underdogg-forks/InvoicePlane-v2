@@ -33,7 +33,7 @@ trait RefreshesOAuth2Token
     public function ensureAuthenticated(): bool
     {
         $accessToken = $this->config['access_token'] ?? null;
-        $expiresAt = $this->config['token_expires_at'] ?? null;
+        $expiresAt   = $this->config['token_expires_at'] ?? null;
 
         // Token exists and is not expired
         if ($accessToken && $expiresAt) {
@@ -44,16 +44,16 @@ trait RefreshesOAuth2Token
         }
 
         // Token missing or expired — refresh
-        $clientId = $this->config['client_id'] ?? null;
+        $clientId     = $this->config['client_id'] ?? null;
         $clientSecret = $this->config['client_secret'] ?? null;
 
-        if (!$clientId || !$clientSecret) {
+        if ( ! $clientId || ! $clientSecret) {
             return false;
         }
 
         // Build temporary client to perform OAuth2 exchange
         $clientClass = $this->getOAuth2ClientClass();
-        if (!$clientClass || !class_exists($clientClass)) {
+        if ( ! $clientClass || ! class_exists($clientClass)) {
             return false;
         }
 
@@ -64,17 +64,17 @@ trait RefreshesOAuth2Token
         );
 
         // Perform OAuth2 authentication
-        if (!$tempClient->authenticate(['client_id' => $clientId, 'client_secret' => $clientSecret])) {
+        if ( ! $tempClient->authenticate(['client_id' => $clientId, 'client_secret' => $clientSecret])) {
             return false;
         }
 
         // Extract token and expiry from response
         $response = $tempClient->getLastAuthResponse();
-        if (!$response || !isset($response['access_token'])) {
+        if ( ! $response || ! isset($response['access_token'])) {
             return false;
         }
 
-        $newToken = $response['access_token'];
+        $newToken  = $response['access_token'];
         $expiresIn = $response['expires_in'] ?? 3600;
         $expiresAt = Carbon::now()->addSeconds($expiresIn)->toDateTimeString();
 

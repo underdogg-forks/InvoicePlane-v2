@@ -2,17 +2,19 @@
 
 namespace Modules\Invoices\Peppol\Providers\Qonto;
 
+use Modules\Core\Support\PDF\PDFFactory;
 use Modules\Invoices\Models\PeppolIntegration;
 use Modules\Invoices\Peppol\Clients\Qonto\ClientInvoicesClient;
 use Modules\Invoices\Peppol\Clients\Qonto\QontoClient;
 use Modules\Invoices\Peppol\Clients\Qonto\SupplierInvoicesClient;
 use Modules\Invoices\Peppol\Providers\BaseProvider;
 use Modules\Invoices\Services\InvoiceService;
-use Modules\Core\Support\PDF\PDFFactory;
+use Throwable;
 
 class QontoProvider extends BaseProvider
 {
     protected object $clientInvoicesClient;
+
     protected object $supplierInvoicesClient;
 
     public function __construct(
@@ -21,8 +23,25 @@ class QontoProvider extends BaseProvider
         ?object $supplierInvoicesClient = null
     ) {
         parent::__construct($integration);
-        $this->clientInvoicesClient = $clientInvoicesClient ?? app(ClientInvoicesClient::class);
-        $this->supplierInvoicesClient = $supplierInvoicesClient ?? app(SupplierInvoicesClient::class);
+
+        $httpClient = app(\Modules\Invoices\Http\Contracts\HttpClientInterface::class);
+        $apiKey     = $this->getAccessToken() ?? '';
+        $baseUrl    = $this->getDefaultBaseUrl();
+
+        $this->clientInvoicesClient   = $clientInvoicesClient ?? new ClientInvoicesClient($httpClient, $apiKey, $baseUrl);
+        $this->supplierInvoicesClient = $supplierInvoicesClient ?? new SupplierInvoicesClient($httpClient, $apiKey, $baseUrl);
+    }
+
+    /**
+     * Get the declarative settings schema for Qonto.
+     *
+     * Delegates to the client's static method for a single source of truth.
+     *
+     * @return array<string> list of config keys
+     */
+    public static function settings(): array
+    {
+        return QontoClient::settings();
     }
 
     public function getProviderName(): string
@@ -44,19 +63,19 @@ class QontoProvider extends BaseProvider
     {
         try {
             $invoice = $transmissionData['invoice'] ?? null;
-            if (!$invoice) {
+            if ( ! $invoice) {
                 return ['accepted' => false, 'external_id' => null, 'status_code' => 0, 'message' => 'Missing invoice', 'response' => null];
             }
 
-            $html = app(InvoiceService::class)->renderHtml($invoice);
+            $html      = app(InvoiceService::class)->renderHtml($invoice);
             $pdfBinary = PDFFactory::create()->getOutput($html);
 
             $response = $this->clientInvoicesClient->import($pdfBinary);
-            if (!$response->successful()) {
+            if ( ! $response->successful()) {
                 return ['accepted' => false, 'external_id' => null, 'status_code' => $response->status(), 'message' => 'Qonto import failed', 'response' => $response->json()];
             }
 
-            $invoiceId = $response->json('id');
+            $invoiceId    = $response->json('id');
             $sendResponse = $this->clientInvoicesClient->sendByEinvoice($invoiceId);
 
             return [
@@ -66,7 +85,7 @@ class QontoProvider extends BaseProvider
                 'message'     => 'Invoice submitted to Qonto',
                 'response'    => $sendResponse->json(),
             ];
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return ['accepted' => false, 'external_id' => null, 'status_code' => 0, 'message' => 'Qonto error: ' . $e->getMessage(), 'response' => null];
         }
     }
@@ -75,8 +94,9 @@ class QontoProvider extends BaseProvider
     {
         try {
             $response = $this->clientInvoicesClient->getStatus($externalId);
+
             return ['status' => $response->json('status', 'unknown'), 'ack_payload' => $response->json()];
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return ['status' => 'error', 'ack_payload' => ['error' => $e->getMessage()]];
         }
     }
@@ -84,10 +104,11 @@ class QontoProvider extends BaseProvider
     public function fetchAcknowledgements(?\Carbon\Carbon $since = null): array
     {
         try {
-            $filters = $since ? ['since' => $since->toIso8601String()] : [];
+            $filters  = $since ? ['since' => $since->toIso8601String()] : [];
             $response = $this->supplierInvoicesClient->list($filters);
+
             return $response->json('invoices', []);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return [];
         }
     }
@@ -95,11 +116,6 @@ class QontoProvider extends BaseProvider
     public function cancelDocument(string $externalId): array
     {
         return ['success' => false, 'message' => 'Qonto does not support document cancellation'];
-    }
-
-    protected function getDefaultBaseUrl(): string
-    {
-        return 'https://thirdparty.qonto.com/api';
     }
 
     public function getAccessToken(): ?string
@@ -112,15 +128,8 @@ class QontoProvider extends BaseProvider
         return $this->config['staging_token'] ?? null;
     }
 
-    /**
-     * Get the declarative settings schema for Qonto.
-     *
-     * Delegates to the client's static method for a single source of truth.
-     *
-     * @return array<string, array> map of config key => settings metadata
-     */
-    public static function settings(): array
+    protected function getDefaultBaseUrl(): string
     {
-        return QontoClient::settings();
+        return 'https://thirdparty.qonto.com/api';
     }
 }

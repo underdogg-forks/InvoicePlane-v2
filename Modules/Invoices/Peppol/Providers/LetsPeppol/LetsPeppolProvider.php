@@ -11,6 +11,7 @@ use Modules\Invoices\Peppol\Clients\LetsPeppol\ParticipantClient;
 use Modules\Invoices\Peppol\Clients\LetsPeppol\TransmissionClient;
 use Modules\Invoices\Peppol\Providers\BaseProvider;
 use Modules\Invoices\Peppol\Providers\Concerns\RefreshesOAuth2Token;
+use Throwable;
 
 /**
  * LetsPeppolProvider - LetsPeppol OAuth2 Peppol provider.
@@ -18,10 +19,15 @@ use Modules\Invoices\Peppol\Providers\Concerns\RefreshesOAuth2Token;
 class LetsPeppolProvider extends BaseProvider
 {
     use RefreshesOAuth2Token;
+
     protected object $invoiceClient;
+
     protected object $creditNoteClient;
+
     protected object $participantClient;
+
     protected object $transmissionClient;
+
     protected object $documentClient;
 
     public function __construct(
@@ -85,6 +91,18 @@ class LetsPeppolProvider extends BaseProvider
         }
     }
 
+    /**
+     * Get the declarative settings schema for LetsPeppol OAuth2.
+     *
+     * Delegates to the client's static method for a single source of truth.
+     *
+     * @return array<string> list of config keys
+     */
+    public static function settings(): array
+    {
+        return LetsPeppolClient::settings();
+    }
+
     public function getProviderName(): string
     {
         return 'lets_peppol';
@@ -109,19 +127,19 @@ class LetsPeppolProvider extends BaseProvider
     public function sendInvoice(array $transmissionData): array
     {
         try {
-            $xml = $transmissionData['xml'] ?? '';
+            $xml             = $transmissionData['xml'] ?? '';
             $recipientScheme = $transmissionData['recipient_scheme'] ?? '';
-            $recipientId = $transmissionData['recipient_id'] ?? '';
+            $recipientId     = $transmissionData['recipient_id'] ?? '';
 
             $payload = [
-                'document'      => base64_encode($xml),
-                'documentType'  => 'invoice',
-                'recipient'     => ['scheme' => $recipientScheme, 'identifier' => $recipientId],
+                'document'     => base64_encode($xml),
+                'documentType' => 'invoice',
+                'recipient'    => ['scheme' => $recipientScheme, 'identifier' => $recipientId],
             ];
 
             $response = $this->invoiceClient->submitInvoice($payload);
 
-            if (!$response->successful()) {
+            if ( ! $response->successful()) {
                 return [
                     'accepted'    => false,
                     'external_id' => null,
@@ -140,7 +158,7 @@ class LetsPeppolProvider extends BaseProvider
                 'message'     => 'Document submitted to LetsPeppol',
                 'response'    => $response->json(),
             ];
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return [
                 'accepted'    => false,
                 'external_id' => null,
@@ -156,7 +174,7 @@ class LetsPeppolProvider extends BaseProvider
         try {
             $response = $this->transmissionClient->getStatus($externalId);
 
-            if (!$response->successful()) {
+            if ( ! $response->successful()) {
                 return [
                     'status'      => 'error',
                     'ack_payload' => ['error' => 'Failed to retrieve status'],
@@ -167,7 +185,7 @@ class LetsPeppolProvider extends BaseProvider
                 'status'      => $response->json('status', 'unknown'),
                 'ack_payload' => $response->json(),
             ];
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return [
                 'status'      => 'error',
                 'ack_payload' => ['error' => $e->getMessage()],
@@ -184,17 +202,12 @@ class LetsPeppolProvider extends BaseProvider
                 'success' => $response->successful(),
                 'message' => $response->successful() ? 'Document cancelled' : 'Cancellation failed',
             ];
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return [
                 'success' => false,
                 'message' => 'Cancellation error: ' . $e->getMessage(),
             ];
         }
-    }
-
-    protected function getDefaultBaseUrl(): string
-    {
-        return 'https://api.letspeppol.com/api/v1';
     }
 
     /**
@@ -240,16 +253,9 @@ class LetsPeppolProvider extends BaseProvider
         return $this->ensureAuthenticated();
     }
 
-    /**
-     * Get the declarative settings schema for LetsPeppol OAuth2.
-     *
-     * Delegates to the client's static method for a single source of truth.
-     *
-     * @return array<string, array> map of config key => settings metadata
-     */
-    public static function settings(): array
+    protected function getDefaultBaseUrl(): string
     {
-        return LetsPeppolClient::settings();
+        return 'https://api.letspeppol.com/api/v1';
     }
 
     /**

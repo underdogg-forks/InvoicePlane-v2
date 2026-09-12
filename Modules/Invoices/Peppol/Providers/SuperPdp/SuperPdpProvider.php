@@ -2,17 +2,19 @@
 
 namespace Modules\Invoices\Peppol\Providers\SuperPdp;
 
+use Modules\Core\Support\PDF\PDFFactory;
 use Modules\Invoices\Models\PeppolIntegration;
 use Modules\Invoices\Peppol\Clients\SuperPdp\InvoicesClient;
 use Modules\Invoices\Peppol\Clients\SuperPdp\SuperPdpClient;
 use Modules\Invoices\Peppol\Providers\BaseProvider;
 use Modules\Invoices\Peppol\Providers\Concerns\RefreshesOAuth2Token;
 use Modules\Invoices\Services\InvoiceService;
-use Modules\Core\Support\PDF\PDFFactory;
+use Throwable;
 
 class SuperPdpProvider extends BaseProvider
 {
     use RefreshesOAuth2Token;
+
     protected object $invoicesClient;
 
     public function __construct(
@@ -20,7 +22,23 @@ class SuperPdpProvider extends BaseProvider
         ?object $invoicesClient = null
     ) {
         parent::__construct($integration);
-        $this->invoicesClient = $invoicesClient ?? app(InvoicesClient::class);
+        $this->invoicesClient = $invoicesClient ?? new InvoicesClient(
+            app(\Modules\Invoices\Http\Contracts\HttpClientInterface::class),
+            $this->getAccessToken() ?? '',
+            $this->getDefaultBaseUrl()
+        );
+    }
+
+    /**
+     * Get the declarative settings schema for SuperPDP OAuth2.
+     *
+     * Delegates to the client's static method for a single source of truth.
+     *
+     * @return array<string> list of config keys
+     */
+    public static function settings(): array
+    {
+        return SuperPdpClient::settings();
     }
 
     public function getProviderName(): string
@@ -42,24 +60,24 @@ class SuperPdpProvider extends BaseProvider
     {
         try {
             $invoice = $transmissionData['invoice'] ?? null;
-            if (!$invoice) {
+            if ( ! $invoice) {
                 return ['accepted' => false, 'external_id' => null, 'status_code' => 0, 'message' => 'Missing invoice', 'response' => null];
             }
 
-            $html = app(InvoiceService::class)->renderHtml($invoice);
+            $html      = app(InvoiceService::class)->renderHtml($invoice);
             $pdfBinary = PDFFactory::create()->getOutput($html);
 
             $response = $this->invoicesClient->sendInvoice($pdfBinary, [
                 'recipient' => $transmissionData['recipient_id'] ?? '',
-                'scheme' => $transmissionData['recipient_scheme'] ?? '',
+                'scheme'    => $transmissionData['recipient_scheme'] ?? '',
             ]);
 
-            if (!$response->successful()) {
+            if ( ! $response->successful()) {
                 return ['accepted' => false, 'external_id' => null, 'status_code' => $response->status(), 'message' => 'SuperPDP rejected submission', 'response' => $response->json()];
             }
 
             return ['accepted' => true, 'external_id' => $response->json('externalId'), 'status_code' => $response->status(), 'message' => 'PDF submitted to SuperPDP', 'response' => $response->json()];
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return ['accepted' => false, 'external_id' => null, 'status_code' => 0, 'message' => 'SuperPDP error: ' . $e->getMessage(), 'response' => null];
         }
     }
@@ -68,8 +86,9 @@ class SuperPdpProvider extends BaseProvider
     {
         try {
             $response = $this->invoicesClient->getInvoiceStatus($externalId);
+
             return ['status' => $response->json('status', 'unknown'), 'ack_payload' => $response->json()];
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return ['status' => 'error', 'ack_payload' => ['error' => $e->getMessage()]];
         }
     }
@@ -77,11 +96,6 @@ class SuperPdpProvider extends BaseProvider
     public function cancelDocument(string $externalId): array
     {
         return ['success' => false, 'message' => 'SuperPDP does not support document cancellation'];
-    }
-
-    protected function getDefaultBaseUrl(): string
-    {
-        return 'https://api.superpdp.com/v1';
     }
 
     public function getClientId(): ?string
@@ -100,18 +114,6 @@ class SuperPdpProvider extends BaseProvider
     }
 
     /**
-     * Get the declarative settings schema for SuperPDP OAuth2.
-     *
-     * Delegates to the client's static method for a single source of truth.
-     *
-     * @return array<string, array> map of config key => settings metadata
-     */
-    public static function settings(): array
-    {
-        return SuperPdpClient::settings();
-    }
-
-    /**
      * Authenticate with SuperPDP using OAuth2 client-credentials flow.
      *
      * Ensures a valid access token exists, fetching and persisting a new one if needed.
@@ -122,6 +124,11 @@ class SuperPdpProvider extends BaseProvider
     public function authenticate(): bool
     {
         return $this->ensureAuthenticated();
+    }
+
+    protected function getDefaultBaseUrl(): string
+    {
+        return 'https://api.superpdp.com/v1';
     }
 
     /**
