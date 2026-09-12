@@ -146,6 +146,14 @@ $user->isSuperAdmin()  // shorthand
 
 All live at `Modules/Core/Tests/`.
 
+### Test method naming
+
+Every test method **must** start with `it_` and form a grammatically correct English
+sentence when you replace underscores with spaces (`it_returns_404_for_a_nonexistent_record`,
+not `test_returns_404` or `it_user_can_view_document`). Annotate with `#[Test]`, never a
+`test_` prefix. See the `phpunit-test-naming` skill for the full convention, wrong/right
+examples, and an audit command.
+
 ### Patterns
 
 ```php
