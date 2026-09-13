@@ -2,10 +2,10 @@
 
 namespace Modules\Invoices\Filament\Admin\Resources\PeppolIntegrations\Schemas;
 
-use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Modules\Core\Models\Company;

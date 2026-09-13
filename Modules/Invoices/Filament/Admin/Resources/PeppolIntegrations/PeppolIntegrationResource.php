@@ -4,7 +4,11 @@ namespace Modules\Invoices\Filament\Admin\Resources\PeppolIntegrations;
 
 use BackedEnum;
 use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
+use Modules\Core\Enums\Permission;
 use Modules\Invoices\Filament\Admin\Resources\PeppolIntegrations\Pages\CreatePeppolIntegration;
 use Modules\Invoices\Filament\Admin\Resources\PeppolIntegrations\Pages\EditPeppolIntegration;
 use Modules\Invoices\Filament\Admin\Resources\PeppolIntegrations\Pages\ListPeppolIntegrations;
@@ -32,17 +36,38 @@ class PeppolIntegrationResource extends Resource
         ];
     }
 
-    public static function getFormSchema(): array
+    public static function form(Schema $schema): Schema
     {
-        return PeppolIntegrationForm::configure(
-            app(\Filament\Schemas\Schema::class)
-        )->getComponents();
+        return PeppolIntegrationForm::configure($schema);
     }
 
-    public static function getTableSchema(): array
+    public static function table(Table $table): Table
     {
-        return PeppolIntegrationsTable::configure(
-            app(\Filament\Tables\Table::class)
-        )->getColumns();
+        return PeppolIntegrationsTable::configure($table);
+    }
+
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->can(Permission::VIEW_PEPPOL_INTEGRATIONS->value) ?? false;
+    }
+
+    public static function canCreate(): bool
+    {
+        return auth()->user()?->can(Permission::CREATE_PEPPOL_INTEGRATIONS->value) ?? false;
+    }
+
+    public static function canView(Model $record): bool
+    {
+        return auth()->user()?->can(Permission::VIEW_PEPPOL_INTEGRATIONS->value) ?? false;
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return auth()->user()?->can(Permission::EDIT_PEPPOL_INTEGRATIONS->value) ?? false;
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return auth()->user()?->can(Permission::DELETE_PEPPOL_INTEGRATIONS->value) ?? false;
     }
 }

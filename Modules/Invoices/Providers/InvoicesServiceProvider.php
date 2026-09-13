@@ -11,8 +11,10 @@ use Modules\Invoices\Http\Decorators\RateLimiter;
 use Modules\Invoices\Http\Decorators\RequestLogger;
 use Modules\Invoices\Models\Invoice;
 use Modules\Invoices\Models\InvoiceItem;
+use Modules\Invoices\Models\PeppolIntegration;
 use Modules\Invoices\Observers\InvoiceItemObserver;
 use Modules\Invoices\Observers\InvoiceObserver;
+use Modules\Invoices\Observers\PeppolIntegrationObserver;
 use Nwidart\Modules\Traits\PathNamespace;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -35,6 +37,7 @@ class InvoicesServiceProvider extends ServiceProvider
         $this->loadMigrationsFrom(module_path($this->name, 'Database/Migrations'));
         Invoice::observe(InvoiceObserver::class);
         InvoiceItem::observe(InvoiceItemObserver::class);
+        PeppolIntegration::observe(PeppolIntegrationObserver::class);
     }
 
     public function register(): void

@@ -27,11 +27,13 @@ use Modules\Core\Filament\Admin\Pages\ImportV1Page;
 use Modules\Core\Filament\Admin\Pages\RolePermissionsPage;
 use Modules\Core\Filament\Admin\Resources\Companies\CompanyResource;
 use Modules\Core\Filament\Admin\Resources\EmailTemplates\EmailTemplateResource;
+use Modules\Core\Filament\Admin\Resources\MerchantClients\MerchantClientResource;
 use Modules\Core\Filament\Admin\Resources\Numberings\NumberingResource;
 use Modules\Core\Filament\Admin\Resources\TaxRates\TaxRateResource;
 use Modules\Core\Filament\Admin\Resources\Users\UserResource;
 use Modules\Core\Filament\Pages\Auth\EditProfile;
 use Modules\Core\Filament\Pages\Auth\Login;
+use Modules\Invoices\Filament\Admin\Resources\PeppolIntegrations\PeppolIntegrationResource;
 
 class AdminPanelProvider extends PanelProvider
 {
@@ -170,6 +172,8 @@ class AdminPanelProvider extends PanelProvider
                 EmailTemplateResource::class,
                 TaxRateResource::class,
                 UserResource::class,
+                MerchantClientResource::class,
+                PeppolIntegrationResource::class,
             ])
             ->discoverPages(in: base_path('Modules/Core/Filament/Admin/Pages'), for: 'Modules\Core\Filament\Admin\Pages')
             ->discoverWidgets(in: base_path('Modules/Core/Filament/Admin/Widgets'), for: 'Modules\Core\Filament\Admin\Widgets')

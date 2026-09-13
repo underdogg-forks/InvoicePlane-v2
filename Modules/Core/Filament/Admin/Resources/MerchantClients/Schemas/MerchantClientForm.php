@@ -2,11 +2,13 @@
 
 namespace Modules\Core\Filament\Admin\Resources\MerchantClients\Schemas;
 
-use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
+use Illuminate\Validation\Rules\Unique;
 use Modules\Core\Models\Company;
 
 class MerchantClientForm
@@ -41,6 +43,13 @@ class MerchantClientForm
                                 TextInput::make('merchant_key')
                                     ->label('Key')
                                     ->required()
+                                    ->unique(
+                                        table: 'merchant_clients',
+                                        ignoreRecord: true,
+                                        modifyRuleUsing: fn (Unique $rule, Get $get) => $rule
+                                            ->where('company_id', $get('company_id'))
+                                            ->where('driver', $get('driver')),
+                                    )
                                     ->columnSpan(1),
 
                                 TextInput::make('merchant_value')

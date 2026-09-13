@@ -45,6 +45,7 @@ class PeppolStatusPoller implements ShouldQueue
 
         // Get all transmissions awaiting acknowledgement (without global scope since this is a system job)
         $transmissions = PeppolTransmission::withoutGlobalScopes()
+            ->with('integration')
             ->where('status', PeppolTransmissionStatus::SENT)
             ->whereNotNull('external_id')
             ->whereNull('acknowledged_at')

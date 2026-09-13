@@ -42,6 +42,7 @@ class RetryFailedTransmissions implements ShouldQueue
 
         // Get transmissions ready for retry (without global scope since this is a system job)
         $transmissions = PeppolTransmission::withoutGlobalScopes()
+            ->with(['integration', 'invoice'])
             ->where('status', PeppolTransmissionStatus::RETRYING)
             ->where('next_retry_at', '<=', now())
             ->limit(50) // Process in batches
@@ -81,6 +82,18 @@ class RetryFailedTransmissions implements ShouldQueue
                 'attempts'        => $transmission->attempts,
             ]);
 
+            return;
+        }
+
+        // Atomically claim the transmission before dispatching, so an overlapping run of this
+        // job (e.g. a slow previous run still in flight when the next schedule tick fires)
+        // can't dispatch the same transmission twice.
+        $claimed = PeppolTransmission::withoutGlobalScopes()
+            ->where('id', $transmission->id)
+            ->where('status', PeppolTransmissionStatus::RETRYING)
+            ->update(['status' => PeppolTransmissionStatus::PROCESSING]);
+
+        if ($claimed !== 1) {
             return;
         }
 

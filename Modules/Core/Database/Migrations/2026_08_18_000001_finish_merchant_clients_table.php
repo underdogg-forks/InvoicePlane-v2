@@ -23,6 +23,12 @@ return new class () extends Migration {
 
             // Add foreign key on company_id (cascade delete)
             $table->foreign('company_id')->references('id')->on('companies')->onDelete('cascade');
+
+            // client_id is a legacy column from the original Payments-only schema; nothing in
+            // Payments or Peppol reads/writes it (Payments' actual FK is payments.merchant_client_id,
+            // a different column). It has no meaning for the new company/driver/key/value rows this
+            // migration enables, so relax its NOT NULL constraint rather than fabricating a value.
+            $table->integer('client_id')->nullable()->change();
         });
     }
 
