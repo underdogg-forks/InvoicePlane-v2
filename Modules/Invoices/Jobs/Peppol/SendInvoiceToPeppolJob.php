@@ -2,7 +2,6 @@
 
 namespace Modules\Invoices\Jobs\Peppol;
 
-use Exception;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -21,8 +20,10 @@ use Modules\Invoices\Models\PeppolIntegration;
 use Modules\Invoices\Models\PeppolTransmission;
 use Modules\Invoices\Peppol\FormatHandlers\FormatHandlerFactory;
 use Modules\Invoices\Peppol\Providers\ProviderFactory;
+use Modules\Invoices\Peppol\Validation\PeppolXmlValidator;
 use Modules\Invoices\Traits\LogsPeppolActivity;
 use RuntimeException;
+use Throwable;
 
 /**
  * Job to send an invoice to the Peppol network.
@@ -118,7 +119,7 @@ class SendInvoiceToPeppolJob implements ShouldQueue
 
             // Step 5: Send to provider
             $this->sendToProvider($transmission);
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             $this->logPeppolError('Peppol sending job failed', [
                 'invoice_id' => $this->invoice->id,
                 'error'      => $e->getMessage(),
@@ -129,6 +130,29 @@ class SendInvoiceToPeppolJob implements ShouldQueue
                 $this->handleFailure($transmission, $e);
             }
         }
+    }
+
+    /**
+     * Laravel's queue-worker failed-job hook — reached only when the job fails outside its own
+     * internal try/catch (e.g. model deserialization errors), since handle() otherwise catches
+     * and handles every Throwable itself.
+     */
+    public function failed(Throwable $e): void
+    {
+        $this->logPeppolError('Peppol send job failed permanently (queue-level failure)', [
+            'invoice_id'      => $this->invoice->id ?? null,
+            'integration_id'  => $this->integration->id ?? null,
+            'transmission_id' => $this->transmissionId,
+            'error'           => $e->getMessage(),
+        ]);
+
+        if ( ! $this->transmissionId) {
+            return;
+        }
+
+        PeppolTransmission::withoutGlobalScopes()
+            ->find($this->transmissionId)
+            ?->markAsDead('Job failed permanently: ' . $e->getMessage());
     }
 
     /**
@@ -157,7 +181,7 @@ class SendInvoiceToPeppolJob implements ShouldQueue
             throw new InvalidArgumentException('Customer Peppol ID has not been validated');
         }
 
-        if ( ! $this->invoice->number) {
+        if ( ! $this->invoice->invoice_number) {
             throw new InvalidArgumentException('Invoice must have an invoice number');
         }
 
@@ -227,11 +251,14 @@ class SendInvoiceToPeppolJob implements ShouldQueue
      */
     protected function calculateIdempotencyKey(): string
     {
+        // Invoice has no updated_at (Invoice::$timestamps is false and the invoices table has no
+        // timestamp columns at all) — key on identity only. This means re-sending after editing an
+        // invoice reuses the same transmission record rather than starting a fresh one; if that
+        // needs to change, it requires a real last-modified signal on Invoice, not just this key.
         return hash('sha256', implode('|', [
             $this->invoice->id,
             $this->invoice->customer->peppol_id,
             $this->integration->id,
-            $this->invoice->updated_at->timestamp,
         ]));
     }
 
@@ -265,7 +292,14 @@ class SendInvoiceToPeppolJob implements ShouldQueue
         // Generate XML directly from invoice using handler
         $xml = $handler->generateXml($this->invoice);
 
-        // Validate XML (handler's validate method checks the invoice)
+        // Validate the generated document itself (well-formedness/schema) — catches
+        // generation bugs before anything is stored or sent, rather than after the fact.
+        $xmlErrors = (new PeppolXmlValidator())->validate($xml, $transmission->format);
+        if ( ! empty($xmlErrors)) {
+            throw new RuntimeException('Generated Peppol XML is invalid: ' . implode(', ', $xmlErrors));
+        }
+
+        // Validate business rules (handler's validate method checks the invoice)
         $errors = $handler->validate($this->invoice);
         if ( ! empty($errors)) {
             throw new RuntimeException('Invoice validation failed: ' . implode(', ', $errors));
@@ -347,15 +381,21 @@ class SendInvoiceToPeppolJob implements ShouldQueue
         // Get XML content
         $xml = Storage::get($transmission->stored_xml_path);
 
-        // Prepare transmission data
+        // Prepare transmission data. This is a superset covering every provider's actual
+        // sendInvoice() needs — xml-based providers (LetsPeppol, Storecove) read 'xml' plus
+        // 'recipient_id'/'recipient_scheme'; PDF-based providers (SuperPdp, Qonto) read the
+        // 'invoice' model directly; EInvoiceBeProvider builds its own structured document from
+        // 'invoice'. Key names match what the providers' sendInvoice() implementations already
+        // read (see StorecoveProviderTest for the recipient_id/recipient_scheme contract).
         $transmissionData = [
-            'transmission_id'        => $transmission->id,
-            'invoice_id'             => $this->invoice->id,
-            'customer_peppol_id'     => $this->invoice->customer->peppol_id,
-            'customer_peppol_scheme' => $this->invoice->customer->peppol_scheme,
-            'format'                 => $transmission->format,
-            'xml'                    => $xml,
-            'idempotency_key'        => $transmission->idempotency_key,
+            'transmission_id'  => $transmission->id,
+            'invoice_id'       => $this->invoice->id,
+            'invoice'          => $this->invoice,
+            'recipient_id'     => $this->invoice->customer->peppol_id,
+            'recipient_scheme' => $this->invoice->customer->peppol_scheme,
+            'format'           => $transmission->format,
+            'xml'              => $xml,
+            'idempotency_key'  => $transmission->idempotency_key,
         ];
 
         // Send to provider
@@ -413,9 +453,9 @@ class SendInvoiceToPeppolJob implements ShouldQueue
      * Mark the given transmission as failed because of an exception, emit a failure event, and schedule a retry if appropriate.
      *
      * @param PeppolTransmission $transmission the transmission to mark as failed
-     * @param Exception          $e            the exception that caused the failure; its message is recorded on the transmission
+     * @param Throwable          $e            the exception that caused the failure; its message is recorded on the transmission
      */
-    protected function handleFailure(PeppolTransmission $transmission, Exception $e): void
+    protected function handleFailure(PeppolTransmission $transmission, Throwable $e): void
     {
         $transmission->markAsFailed(
             $e->getMessage(),
@@ -447,9 +487,11 @@ class SendInvoiceToPeppolJob implements ShouldQueue
             return;
         }
 
-        // Exponential backoff: 1min, 5min, 30min, 2h, 6h
+        // Exponential backoff: 1min, 5min, 30min, 2h, 6h.
+        // $transmission->attempts was already incremented by markAsFailed() for this failure,
+        // so this is a 1-based count — index with attempts - 1 to actually reach the first (60s) tier.
         $delays = [60, 300, 1800, 7200, 21600];
-        $delay  = $delays[$transmission->attempts] ?? 21600;
+        $delay  = $delays[max(0, $transmission->attempts - 1)] ?? 21600;
 
         $nextRetryAt = now()->addSeconds($delay);
         $transmission->scheduleRetry($nextRetryAt);

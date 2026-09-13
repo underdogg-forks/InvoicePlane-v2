@@ -120,9 +120,14 @@ class PeppolTransmission extends Model
     public function setProviderResponse(array $response): void
     {
         foreach ($response as $key => $value) {
+            // company_id is set explicitly rather than left to BelongsToCompany's auto-injection —
+            // this runs from queued jobs with no Filament tenant/session to infer it from.
             $this->responses()->updateOrCreate(
                 ['response_key' => $key],
-                ['response_value' => is_array($value) ? json_encode($value) : $value]
+                [
+                    'response_value' => is_array($value) ? json_encode($value) : $value,
+                    'company_id'     => $this->company_id,
+                ]
             );
         }
     }

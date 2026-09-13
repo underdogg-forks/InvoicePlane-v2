@@ -4,6 +4,7 @@ namespace Modules\Invoices\Peppol\Providers\EInvoiceBe;
 
 use Carbon\Carbon;
 use Exception;
+use Modules\Invoices\Models\Invoice;
 use Modules\Invoices\Peppol\Clients\EInvoiceBe\DocumentsClient;
 use Modules\Invoices\Peppol\Clients\EInvoiceBe\EInvoiceBeClient;
 use Modules\Invoices\Peppol\Clients\EInvoiceBe\HealthClient;
@@ -168,15 +169,10 @@ class EInvoiceBeProvider extends BaseProvider
     /**
      * Submits an invoice document to e-invoice.be and returns the submission result.
      *
-     * @param array $transmissionData the payload sent to the documents API (may include keys such as `invoice_id` used for logging)
+     * @param array $transmissionData transmission DTO; must include an 'invoice' key holding the
+     *                                Invoice model — this provider builds its own e-invoice.be-shaped
+     *                                document from it (see buildDocumentPayload())
      *
-     * @return array{
-     *     accepted: bool,
-     *     external_id: string|null,
-     *     status_code: int,
-     *     message: string,
-     *     response: array|null
-     * }
      * @return array{
      *     accepted: bool,                // `true` if the document was accepted by the API, `false` otherwise
      *     external_id: string|null,      // provider-assigned document identifier when available
@@ -188,7 +184,19 @@ class EInvoiceBeProvider extends BaseProvider
     public function sendInvoice(array $transmissionData): array
     {
         try {
-            $response = $this->documentsClient->submitDocument($transmissionData);
+            $invoice = $transmissionData['invoice'] ?? null;
+
+            if ( ! $invoice instanceof Invoice) {
+                return [
+                    'accepted'    => false,
+                    'external_id' => null,
+                    'status_code' => 0,
+                    'message'     => 'Missing invoice',
+                    'response'    => null,
+                ];
+            }
+
+            $response = $this->documentsClient->submitDocument($this->buildDocumentPayload($invoice));
 
             if ($response->successful()) {
                 $data = $response->json();
@@ -385,5 +393,50 @@ class EInvoiceBeProvider extends BaseProvider
     protected function getDefaultBaseUrl(): string
     {
         return 'https://api.e-invoice.be';
+    }
+
+    /**
+     * Build the e-invoice.be documents API request body from an invoice.
+     *
+     * Field names for `invoice_lines`/`legal_monetary_total` follow this codebase's own
+     * DocumentsClient documentation, which only illustrates them as `[...]`/`{...}` — verify
+     * the exact nested shape against e-invoice.be's real API docs before relying on this in
+     * production.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildDocumentPayload(Invoice $invoice): array
+    {
+        $customer     = $invoice->customer;
+        $currencyCode = $invoice->currency_code ?? config('invoices.peppol.document.currency_code', 'EUR');
+
+        return [
+            'document_type'  => 'invoice',
+            'invoice_number' => $invoice->invoice_number,
+            'issue_date'     => $invoice->invoiced_at?->format('Y-m-d'),
+            'due_date'       => $invoice->invoice_due_at?->format('Y-m-d'),
+            'currency_code'  => $currencyCode,
+            'supplier'       => [
+                'name'       => config('invoices.peppol.supplier.company_name'),
+                'vat_number' => config('invoices.peppol.supplier.vat_number'),
+            ],
+            'customer' => [
+                'name'            => $customer?->company_name ?? $customer?->customer_name,
+                'endpoint_id'     => $customer?->peppol_id,
+                'endpoint_scheme' => $customer?->peppol_scheme,
+            ],
+            'invoice_lines' => $invoice->invoiceItems->map(fn ($item) => [
+                'description' => $item->item_name,
+                'quantity'    => $item->quantity,
+                'unit_price'  => $item->price,
+                'line_total'  => $item->subtotal,
+            ])->all(),
+            'legal_monetary_total' => [
+                'line_extension_amount' => $invoice->invoice_subtotal,
+                'tax_exclusive_amount'  => $invoice->invoice_subtotal,
+                'tax_inclusive_amount'  => $invoice->invoice_total,
+                'payable_amount'        => $invoice->invoice_total,
+            ],
+        ];
     }
 }
