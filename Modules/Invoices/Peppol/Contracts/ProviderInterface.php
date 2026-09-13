@@ -22,6 +22,18 @@ interface ProviderInterface
     public static function settings(): array;
 
     /**
+     * Get the subset of settings() that are system-managed rather than human-entered.
+     *
+     * OAuth2 providers list `access_token` in settings() because it's part of what
+     * authenticate() reads from stored config, but it's fetched and persisted
+     * automatically by RefreshesOAuth2Token::ensureAuthenticated() — an admin should
+     * never type it into a credential form. Static-credential providers have none.
+     *
+     * @return array<string> subset of settings() keys to exclude from credential-entry forms
+     */
+    public static function managedSettingsKeys(): array;
+
+    /**
      * Test the connection with provider credentials.
      *
      * @param array $config Provider-specific configuration

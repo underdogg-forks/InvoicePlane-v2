@@ -41,6 +41,11 @@ class SuperPdpProvider extends BaseProvider
         return SuperPdpClient::settings();
     }
 
+    public static function managedSettingsKeys(): array
+    {
+        return ['access_token'];
+    }
+
     public function getProviderName(): string
     {
         return 'super_pdp';

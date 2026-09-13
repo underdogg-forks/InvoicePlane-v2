@@ -2,13 +2,15 @@
 
 namespace Modules\Invoices\Filament\Admin\Resources\PeppolIntegrations\Schemas;
 
-use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Modules\Core\Models\Company;
+use Modules\Invoices\Models\PeppolIntegration;
 use Modules\Invoices\Peppol\Providers\ProviderFactory;
 use Throwable;
 
@@ -35,7 +37,7 @@ class PeppolIntegrationForm
                                     ->label('Provider')
                                     ->options(self::getProviderOptions())
                                     ->required()
-                                    ->reactive()
+                                    ->live()
                                     ->columnSpan(1),
 
                                 Toggle::make('enabled')
@@ -48,9 +50,9 @@ class PeppolIntegrationForm
 
                 // Dynamic provider-specific settings
                 Section::make('Provider Configuration')
-                    ->schema(self::getDynamicProviderFields())
+                    ->schema(fn (Get $get): array => self::getDynamicProviderFields($get('provider_name')))
                     ->columnSpanFull()
-                    ->visible(fn ($get) => ! empty($get('provider_name'))),
+                    ->visible(fn (Get $get) => ! empty($get('provider_name'))),
             ]);
     }
 
@@ -73,22 +75,48 @@ class PeppolIntegrationForm
     }
 
     /**
-     * Build dynamic form fields based on provider schema.
-     *
-     * This renders all fields defined in the provider's settings() schema.
-     * Fields marked as 'managed' are read-only (e.g., access_token).
+     * Build one credential input per key the selected provider declares in settings(),
+     * excluding managedSettingsKeys() (system-managed state like an OAuth2 access_token
+     * that an admin should never type in — see ProviderInterface::managedSettingsKeys()).
      *
      * @return array<mixed>
      */
-    private static function getDynamicProviderFields(): array
+    private static function getDynamicProviderFields(?string $providerName): array
     {
-        // Static placeholder for now — in a full implementation, this would use Filament's
-        // afterStateUpdated() reactive behavior to rebuild fields dynamically
-        return [
-            Placeholder::make('provider_fields_notice')
-                ->label('')
-                ->content('Provider configuration fields will be displayed based on your provider selection.')
-                ->columnSpanFull(),
-        ];
+        if (empty($providerName)) {
+            return [];
+        }
+
+        try {
+            $providerClass = ProviderFactory::getProviderClass($providerName);
+        } catch (Throwable $e) {
+            return [];
+        }
+
+        $keys = array_diff($providerClass::settings(), $providerClass::managedSettingsKeys());
+
+        return collect($keys)
+            ->map(function (string $key) use ($providerName) {
+                // Not a real model column — reaches PeppolManagementService::createIntegration()/
+                // updateIntegration() through the same $data array as company_id/provider_name,
+                // which filters it down to just the provider's declared credential keys before
+                // persisting via setConfig().
+                $field = TextInput::make($key)
+                    ->label(ucfirst(str_replace('_', ' ', $key)))
+                    ->default(function (?PeppolIntegration $record) use ($key, $providerName) {
+                        if ( ! $record || $record->provider_name !== $providerName) {
+                            return null;
+                        }
+
+                        return $record->getConfigValue($key);
+                    });
+
+                if (str_contains($key, 'key') || str_contains($key, 'secret') || str_contains($key, 'token')) {
+                    $field = $field->password()->revealable();
+                }
+
+                return $field;
+            })
+            ->all();
     }
 }

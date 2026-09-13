@@ -54,7 +54,7 @@ class PeppolManagementService
             $integration->save();
 
             // Set configuration using the key-value relationship (stores in merchant_clients)
-            $integration->setConfig($config);
+            $integration->setConfig($this->filterConfigForProvider($providerName, $config));
 
             event(new PeppolIntegrationCreated($integration));
 
@@ -88,12 +88,13 @@ class PeppolManagementService
 
             // Update configuration (replaces existing merchant_client rows for this provider)
             // First delete old entries for this provider
-            \Modules\Core\Models\MerchantClient::where('company_id', $integration->company_id)
+            \Modules\Core\Models\MerchantClient::withoutGlobalScopes()
+                ->where('company_id', $integration->company_id)
                 ->where('driver', $integration->provider_name)
                 ->delete();
 
             // Then insert new entries
-            $integration->setConfig($config);
+            $integration->setConfig($this->filterConfigForProvider($integration->provider_name, $config));
 
             DB::commit();
 
@@ -303,5 +304,19 @@ class PeppolManagementService
         $countrySchemeMap = config('invoices.peppol.country_scheme_mapping', []);
 
         return $countrySchemeMap[$countryCode] ?? null;
+    }
+
+    /**
+     * Restrict $config down to the provider's declared, human-entered credential keys —
+     * settings() minus managedSettingsKeys() — so that unrelated form fields (company_id,
+     * provider_name, enabled) passed through the same $data array from Filament never leak
+     * into the merchant_clients key-value store as bogus config entries.
+     */
+    private function filterConfigForProvider(string $providerName, array $config): array
+    {
+        $providerClass = ProviderFactory::getProviderClass($providerName);
+        $allowedKeys   = array_diff($providerClass::settings(), $providerClass::managedSettingsKeys());
+
+        return array_intersect_key($config, array_flip($allowedKeys));
     }
 }

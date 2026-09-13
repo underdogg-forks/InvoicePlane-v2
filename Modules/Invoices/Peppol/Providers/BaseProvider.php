@@ -40,6 +40,14 @@ abstract class BaseProvider implements ProviderInterface
     abstract protected function getDefaultBaseUrl(): string;
 
     /**
+     * Default: no settings() keys are system-managed. OAuth2 providers override this.
+     */
+    public static function managedSettingsKeys(): array
+    {
+        return [];
+    }
+
+    /**
      * Indicates that webhook registration is not supported by this provider.
      *
      * @param string $url    the webhook callback URL to register

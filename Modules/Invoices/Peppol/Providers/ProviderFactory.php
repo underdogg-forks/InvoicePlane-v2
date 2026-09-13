@@ -44,13 +44,24 @@ class ProviderFactory
      */
     public static function makeFromName(string $providerName, ?PeppolIntegration $integration = null): ProviderInterface
     {
+        return app(self::getProviderClass($providerName), ['integration' => $integration]);
+    }
+
+    /**
+     * Resolve a provider key to its fully-qualified class name, without instantiating it —
+     * useful for reading static methods like settings() or managedSettingsKeys().
+     *
+     * @throws InvalidArgumentException if no provider matches the given name
+     */
+    public static function getProviderClass(string $providerName): string
+    {
         $providers = self::discoverProviders();
 
         if ( ! isset($providers[$providerName])) {
             throw new InvalidArgumentException("Unknown Peppol provider: {$providerName}");
         }
 
-        return app($providers[$providerName], ['integration' => $integration]);
+        return $providers[$providerName];
     }
 
     /**

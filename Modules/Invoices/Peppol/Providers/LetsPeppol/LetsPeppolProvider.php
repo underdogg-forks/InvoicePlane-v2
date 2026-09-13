@@ -103,6 +103,11 @@ class LetsPeppolProvider extends BaseProvider
         return LetsPeppolClient::settings();
     }
 
+    public static function managedSettingsKeys(): array
+    {
+        return ['access_token'];
+    }
+
     public function getProviderName(): string
     {
         return 'lets_peppol';
