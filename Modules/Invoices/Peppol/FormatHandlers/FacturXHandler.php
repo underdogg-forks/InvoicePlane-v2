@@ -4,6 +4,7 @@ namespace Modules\Invoices\Peppol\FormatHandlers;
 
 use Modules\Invoices\Models\Invoice;
 use Modules\Invoices\Peppol\Enums\PeppolDocumentFormat;
+use RuntimeException;
 
 /**
  * FacturXHandler - Handler for Factur-X 1.0 format.
@@ -44,14 +45,9 @@ class FacturXHandler extends BaseFormatHandler
      */
     public function generateXml(Invoice $invoice, array $options = []): string
     {
-        $data = $this->transform($invoice, $options);
-
-        // Placeholder - would generate proper CII XML embedded in PDF/A-3
-        // For Factur-X, this would:
-        // 1. Generate the CII XML
-        // 2. Generate a PDF from the invoice
-        // 3. Embed the XML into the PDF as PDF/A-3 attachment
-        return json_encode($data, JSON_PRETTY_PRINT);
+        throw new RuntimeException(
+            $this->getFormat()->label() . ' XML generation is not yet implemented — see InvoicePlane-v2#767.'
+        );
     }
 
     /**

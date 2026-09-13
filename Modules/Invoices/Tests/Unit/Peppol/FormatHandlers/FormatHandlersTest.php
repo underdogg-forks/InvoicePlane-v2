@@ -9,6 +9,7 @@ use Modules\Invoices\Peppol\FormatHandlers\{EhfHandler, FacturXHandler, Facturae
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
+use RuntimeException;
 use stdClass;
 
 /**
@@ -140,17 +141,16 @@ class FormatHandlersTest extends TestCase
     }
 
     #[Test]
-    #[Group('still_failing')]
     #[DataProvider('handlerProvider')]
-    public function it_generates_xml($handlerClass, $format = null): void
+    public function it_throws_for_unimplemented_formats_instead_of_faking_xml($handlerClass, $format = null): void
     {
         $handler = new $handlerClass();
         $invoice = $this->createMockInvoice();
 
-        $xml = $handler->generateXml($invoice);
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('not yet implemented');
 
-        $this->assertIsString($xml);
-        $this->assertNotEmpty($xml);
+        $handler->generateXml($invoice);
     }
 
     #[Test]

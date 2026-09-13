@@ -4,6 +4,7 @@ namespace Modules\Invoices\Peppol\FormatHandlers;
 
 use Modules\Invoices\Models\Invoice;
 use Modules\Invoices\Peppol\Enums\PeppolDocumentFormat;
+use RuntimeException;
 
 /**
  * FacturaeHandler - Handler for Spanish Facturae 3.2 format.
@@ -57,10 +58,9 @@ class FacturaeHandler extends BaseFormatHandler
      */
     public function generateXml(Invoice $invoice, array $options = []): string
     {
-        $data = $this->transform($invoice, $options);
-
-        // Placeholder - would generate proper Facturae XML
-        return json_encode($data, JSON_PRETTY_PRINT);
+        throw new RuntimeException(
+            $this->getFormat()->label() . ' XML generation is not yet implemented — see InvoicePlane-v2#767.'
+        );
     }
 
     /**

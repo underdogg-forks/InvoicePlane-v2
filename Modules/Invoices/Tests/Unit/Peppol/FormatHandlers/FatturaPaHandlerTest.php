@@ -8,6 +8,7 @@ use Modules\Invoices\Peppol\Enums\PeppolDocumentFormat;
 use Modules\Invoices\Peppol\FormatHandlers\FatturaPaHandler;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
+use RuntimeException;
 use stdClass;
 
 /**
@@ -112,14 +113,14 @@ class FatturaPaHandlerTest extends TestCase
     }
 
     #[Test]
-    public function it_generates_xml(): void
+    public function it_throws_because_fatturapa_xml_generation_is_not_yet_implemented(): void
     {
         $invoice = $this->createMockInvoice(['country_code' => 'IT']);
 
-        $xml = $this->handler->generateXml($invoice);
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('not yet implemented');
 
-        $this->assertIsString($xml);
-        $this->assertNotEmpty($xml);
+        $this->handler->generateXml($invoice);
     }
 
     /**

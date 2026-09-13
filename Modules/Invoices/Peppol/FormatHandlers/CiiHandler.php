@@ -3,6 +3,7 @@
 namespace Modules\Invoices\Peppol\FormatHandlers;
 
 use Modules\Invoices\Models\Invoice;
+use RuntimeException;
 
 /**
  * CiiHandler - Cross Industry Invoice (CII) format handler.
@@ -73,8 +74,9 @@ class CiiHandler extends BaseFormatHandler
      */
     public function generateXml(Invoice $invoice, array $options = []): string
     {
-        // Implement XML generation logic
-        return '';
+        throw new RuntimeException(
+            $this->getFormat()->label() . ' XML generation is not yet implemented — see InvoicePlane-v2#767.'
+        );
     }
 
     /**

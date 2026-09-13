@@ -4,6 +4,7 @@ namespace Modules\Invoices\Peppol\FormatHandlers;
 
 use Modules\Invoices\Models\Invoice;
 use Modules\Invoices\Peppol\Enums\PeppolDocumentFormat;
+use RuntimeException;
 
 /**
  * ZugferdHandler - Handler for ZUGFeRD formats (1.0 and 2.0).
@@ -57,10 +58,9 @@ class ZugferdHandler extends BaseFormatHandler
      */
     public function generateXml(Invoice $invoice, array $options = []): string
     {
-        $data = $this->transform($invoice, $options);
-
-        // Placeholder - would generate proper ZUGFeRD XML embedded in PDF/A-3
-        return json_encode($data, JSON_PRETTY_PRINT);
+        throw new RuntimeException(
+            $this->getFormat()->label() . ' XML generation is not yet implemented — see InvoicePlane-v2#767.'
+        );
     }
 
     /**

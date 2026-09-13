@@ -2,8 +2,25 @@
 
 namespace Modules\Invoices\Peppol\FormatHandlers;
 
+use DateTime;
 use Modules\Invoices\Models\Invoice;
 use Modules\Invoices\Peppol\Enums\PeppolDocumentFormat;
+use NumNum\UBL\AccountingParty;
+use NumNum\UBL\Address;
+use NumNum\UBL\Country;
+use NumNum\UBL\Generator;
+use NumNum\UBL\Invoice as UblInvoice;
+use NumNum\UBL\InvoiceLine;
+use NumNum\UBL\Item;
+use NumNum\UBL\LegalEntity;
+use NumNum\UBL\LegalMonetaryTotal;
+use NumNum\UBL\Party;
+use NumNum\UBL\PartyTaxScheme;
+use NumNum\UBL\Price;
+use NumNum\UBL\TaxCategory;
+use NumNum\UBL\TaxScheme;
+use NumNum\UBL\TaxSubTotal;
+use NumNum\UBL\TaxTotal;
 
 /**
  * PeppolBisHandler - Handler for PEPPOL BIS Billing 3.0 format.
@@ -146,14 +163,107 @@ class PeppolBisHandler extends BaseFormatHandler
 
     /**
      * {@inheritdoc}
+     *
+     * Generates a real UBL 2.1 / PEPPOL BIS Billing 3.0 XML document via num-num/ubl-invoice
+     * (schema-validated against the official UBL-Invoice-2.1.xsd in that package's own test
+     * suite). Field mapping mirrors transform() above one-for-one.
      */
     public function generateXml(Invoice $invoice, array $options = []): string
     {
-        $data = $this->transform($invoice, $options);
+        $customer       = $invoice->customer;
+        $currencyCode   = $this->getCurrencyCode($invoice);
+        $endpointScheme = $this->getEndpointScheme($invoice)->value;
 
-        // For now, return JSON representation - would be replaced with actual XML generation
-        // using a library like sabre/xml or generating UBL XML directly
-        return json_encode($data, JSON_PRETTY_PRINT);
+        $supplierAddress = (new Address())
+            ->setStreetName((string) config('invoices.peppol.supplier.street_name'))
+            ->setCityName((string) config('invoices.peppol.supplier.city_name'))
+            ->setPostalZone((string) config('invoices.peppol.supplier.postal_zone'))
+            ->setCountry((new Country())->setIdentificationCode((string) config('invoices.peppol.supplier.country_code')));
+
+        $supplierParty = (new Party())
+            ->setName((string) config('invoices.peppol.supplier.company_name'))
+            ->setEndpointId(config('invoices.peppol.supplier.vat_number'), $endpointScheme)
+            ->setPostalAddress($supplierAddress)
+            ->setPartyTaxScheme(
+                (new PartyTaxScheme())
+                    ->setCompanyId(config('invoices.peppol.supplier.vat_number'))
+                    ->setTaxScheme((new TaxScheme())->setId('VAT'))
+            )
+            ->setLegalEntity(
+                (new LegalEntity())
+                    ->setRegistrationName((string) config('invoices.peppol.supplier.company_name'))
+                    ->setCompanyId(config('invoices.peppol.supplier.vat_number'))
+            );
+
+        $customerAddress = (new Address())
+            ->setStreetName((string) $customer?->street1)
+            ->setCityName((string) $customer?->city)
+            ->setPostalZone((string) $customer?->zip)
+            ->setCountry((new Country())->setIdentificationCode((string) $customer?->country_code));
+
+        $customerParty = (new Party())
+            ->setName($customer?->company_name ?? $customer?->customer_name)
+            ->setEndpointId($customer?->peppol_id, $endpointScheme)
+            ->setPostalAddress($customerAddress);
+
+        $invoiceLines = [];
+
+        foreach ($invoice->invoiceItems as $index => $item) {
+            $price = (new Price())
+                ->setPriceAmount((float) $item->price)
+                ->setBaseQuantity(1)
+                ->setUnitCode(config('invoices.peppol.document.default_unit_code', 'C62'));
+
+            $lineItem = (new Item())
+                ->setName((string) $item->item_name)
+                ->setDescription((string) $item->description);
+
+            $invoiceLines[] = (new InvoiceLine())
+                ->setId((string) ($index + 1))
+                ->setInvoicedQuantity((float) $item->quantity)
+                ->setLineExtensionAmount((float) $item->subtotal)
+                ->setItem($lineItem)
+                ->setPrice($price);
+        }
+
+        $taxAmount   = (float) ($invoice->invoice_tax_total ?? 0);
+        $taxPercent  = (float) ($invoice->invoiceItems->first()?->tax_rate?->rate ?? 0);
+        $taxCategory = (new TaxCategory())
+            ->setId('S')
+            ->setPercent($taxPercent)
+            ->setTaxScheme((new TaxScheme())->setId('VAT'));
+
+        $taxSubTotal = (new TaxSubTotal())
+            ->setTaxableAmount((float) $invoice->invoice_subtotal)
+            ->setTaxAmount($taxAmount)
+            ->setTaxCategory($taxCategory);
+
+        $taxTotal = (new TaxTotal())
+            ->setTaxAmount($taxAmount)
+            ->setTaxSubTotals([$taxSubTotal]);
+
+        $legalMonetaryTotal = (new LegalMonetaryTotal())
+            ->setLineExtensionAmount((float) $invoice->invoice_subtotal)
+            ->setTaxExclusiveAmount((float) $invoice->invoice_subtotal)
+            ->setTaxInclusiveAmount((float) $invoice->invoice_total)
+            ->setPayableAmount((float) $invoice->invoice_total);
+
+        $ublInvoice = (new UblInvoice())
+            ->setUBLVersionId('2.1')
+            ->setCustomizationId('urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0')
+            ->setProfileId('urn:fdc:peppol.eu:2017:poacc:billing:01:1.0')
+            ->setId((string) $invoice->invoice_number)
+            ->setIssueDate($invoice->invoiced_at instanceof DateTime ? $invoice->invoiced_at : new DateTime())
+            ->setDueDate($invoice->invoice_due_at instanceof DateTime ? $invoice->invoice_due_at : null)
+            ->setInvoiceTypeCode(380) // Commercial invoice
+            ->setDocumentCurrencyCode($currencyCode)
+            ->setAccountingSupplierParty((new AccountingParty())->setParty($supplierParty))
+            ->setAccountingCustomerParty((new AccountingParty())->setParty($customerParty))
+            ->setInvoiceLines($invoiceLines)
+            ->setTaxTotal($taxTotal)
+            ->setLegalMonetaryTotal($legalMonetaryTotal);
+
+        return Generator::invoice($ublInvoice, $currencyCode);
     }
 
     /**
