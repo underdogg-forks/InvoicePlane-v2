@@ -48,7 +48,11 @@ class SuperPdpProvider extends BaseProvider
 
     public function testConnection(array $config): array
     {
-        return ['ok' => true, 'message' => 'SuperPDP connection configured'];
+        if ($this->ensureAuthenticated()) {
+            return ['ok' => true, 'message' => 'SuperPDP authentication succeeded'];
+        }
+
+        return ['ok' => false, 'message' => 'SuperPDP authentication failed — check client_id/client_secret'];
     }
 
     public function validatePeppolId(string $scheme, string $id): array
@@ -58,6 +62,10 @@ class SuperPdpProvider extends BaseProvider
 
     public function sendInvoice(array $transmissionData): array
     {
+        if ( ! $this->ensureAuthenticated()) {
+            return ['accepted' => false, 'external_id' => null, 'status_code' => 401, 'message' => 'SuperPDP authentication failed', 'response' => null];
+        }
+
         try {
             $invoice = $transmissionData['invoice'] ?? null;
             if ( ! $invoice) {
@@ -84,6 +92,10 @@ class SuperPdpProvider extends BaseProvider
 
     public function getTransmissionStatus(string $externalId): array
     {
+        if ( ! $this->ensureAuthenticated()) {
+            return ['status' => 'error', 'ack_payload' => ['error' => 'SuperPDP authentication failed']];
+        }
+
         try {
             $response = $this->invoicesClient->getInvoiceStatus($externalId);
 

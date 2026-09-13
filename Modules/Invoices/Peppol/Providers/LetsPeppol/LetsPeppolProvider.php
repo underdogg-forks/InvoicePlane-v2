@@ -110,9 +110,16 @@ class LetsPeppolProvider extends BaseProvider
 
     public function testConnection(array $config): array
     {
+        if ($this->ensureAuthenticated()) {
+            return [
+                'ok'      => true,
+                'message' => 'LetsPeppol authentication succeeded',
+            ];
+        }
+
         return [
-            'ok'      => true,
-            'message' => 'LetsPeppol connection configured',
+            'ok'      => false,
+            'message' => 'LetsPeppol authentication failed — check client_id/client_secret',
         ];
     }
 
@@ -126,6 +133,16 @@ class LetsPeppolProvider extends BaseProvider
 
     public function sendInvoice(array $transmissionData): array
     {
+        if ( ! $this->ensureAuthenticated()) {
+            return [
+                'accepted'    => false,
+                'external_id' => null,
+                'status_code' => 401,
+                'message'     => 'LetsPeppol authentication failed',
+                'response'    => null,
+            ];
+        }
+
         try {
             $xml             = $transmissionData['xml'] ?? '';
             $recipientScheme = $transmissionData['recipient_scheme'] ?? '';
@@ -171,6 +188,13 @@ class LetsPeppolProvider extends BaseProvider
 
     public function getTransmissionStatus(string $externalId): array
     {
+        if ( ! $this->ensureAuthenticated()) {
+            return [
+                'status'      => 'error',
+                'ack_payload' => ['error' => 'LetsPeppol authentication failed'],
+            ];
+        }
+
         try {
             $response = $this->transmissionClient->getStatus($externalId);
 
